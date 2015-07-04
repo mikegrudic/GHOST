@@ -1,9 +1,28 @@
 #!/usr/bin/env python
+"""
+GHOST: Gadget Hdf5 Output Slice and rayTrace
+
+  |\___
+(:o ___(
+  |/
+  
+Usage:
+GHOST.py <files> ... [options]
+
+Options:
+    -h --help         Show this screen.
+    --rmax=<kpc>      Maximum radius of plot window [default: 1.0]
+    --plane=<x,y,z>   Slice/projection plane [default: z]
+    --c=<cx,cy,cz>    Coordinates of plot window center [default: 0.0,0.0,0.0]
+    --verbose         Verbose output
+    --antialiasing    Antialias plots at some cost to speed 
+    --gridres=<N>     Resolution of slice/projection grid [default: 400]
+    --neighbors=<N>   Number of neighbors used for smoothing length calculation [default: 32]
+"""
+
 from sys import argv, stdout
-import os
-from PlotSettings import *
-from glob import glob
 import matplotlib as mpl
+from PlotSettings import *
 mpl.use('Agg')
 import matplotlib.pyplot as plt
 import h5py
@@ -12,25 +31,22 @@ import color_maps
 from scipy import spatial
 from joblib import Parallel, delayed, cpu_count
 from matplotlib.colors import LogNorm
-#import#data_field_defs
+import re
 import hope
-import 
+from docopt import docopt
 hope.config.optimize = True
 
+arguments = docopt(__doc__)
+filenames = arguments["<files>"]
+rmax = float(arguments["--rmax"])
+plane = arguments["--plane"]
+center = np.array([float(c) for c in re.split(',', arguments["--c"])])
+verbose = arguments["--verbose"]
+AA = arguments["--antialiasing"]
+n_ngb = int(arguments["--neighbors"])
+gridres = int(arguments["--gridres"])
+
 G = 4.3e4
-
-filenames = glob(argv[1])
-rmax = float(argv[2])
-
-
-if len(argv) > 3:
-    plane = argv[3]
-else:
-    plane = 'z'
-if len(argv) > 4:
-    type_toplot = int(float(argv[4])+0.5)
-else:
-    type_toplot = 0
 
 nums = np.int64([fn.split('_')[1].split('.')[0] for fn in filenames])
 filenames = np.array(filenames)[np.argsort(nums)]

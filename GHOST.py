@@ -12,8 +12,9 @@ import color_maps
 from scipy import spatial
 from joblib import Parallel, delayed, cpu_count
 from matplotlib.colors import LogNorm
-import data_field_defs
+#import#data_field_defs
 import hope
+import 
 hope.config.optimize = True
 
 G = 4.3e4
@@ -117,7 +118,7 @@ class SnapData:
         
         for i, n in enumerate(particle_counts):
             if n==0: continue
-#            if not i in fields_toplot.keys(): continue
+            if len(fields_toplot[i]) == 0 : continue
             if i==5: continue
 
             pname = {0:"Gas", 1:"DM", 2:"Disk", 3:"Bulge", 5:"BH", 4:"Stars"}[i]

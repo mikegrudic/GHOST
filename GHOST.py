@@ -15,10 +15,11 @@ Options:
     --plane=<x,y,z>   Slice/projection plane [default: z]
     --c=<cx,cy,cz>    Coordinates of plot window center [default: 0.0,0.0,0.0]
     --verbose         Verbose output
-    --antialiasing    Antialias plots at some cost to speed 
+    --antialiasing    Using antialiasing when sampling the grid data for the actual plot. Costs some speed.
     --gridres=<N>     Resolution of slice/projection grid [default: 400]
     --neighbors=<N>   Number of neighbors used for smoothing length calculation [default: 32]
     --np=<N>          Number of processors to run on. Please don't use up the whole head node. [default: 1]
+    --periodic        Whether the simulation is periodic
 """
 
 from sys import argv, stdout
@@ -47,6 +48,7 @@ AA = arguments["--antialiasing"]
 n_ngb = int(arguments["--neighbors"])
 gridres = int(arguments["--gridres"])
 nproc = int(arguments["--np"])
+periodic = arguments["--periodic"]
 
 G = 4.3e4
 
@@ -127,6 +129,7 @@ class SnapData:
     def __init__(self, name):
         f = h5py.File(name, "r")
         header_toparse = f["Header"].attrs
+        box_size = header_toparse["BoxSize"]
         self.time = header_toparse["Time"]
         
         particle_counts = header_toparse["NumPart_ThisFile"]
@@ -143,12 +146,18 @@ class SnapData:
             
             ptype = f["PartType%d" % i]
             X = np.array(ptype["Coordinates"]) - center
+            if periodic: X = (X + box_size/2)%box_size - box_size/2
             r[i] = np.sqrt(np.sum(X[:,:2]**2, axis=1))
             filter = r[i] <= 1.01*np.sqrt(2)*rmax #only need to look at particles that are in the window
             
             for key in ptype.keys():
                 self.field_data[i][key] = np.array(ptype[key])[filter]
             r[i] = r[i][filter]
+
+            self.field_data[i]["Coordinates"] = X[filter]
+#            self.field_data[i]["Coordinates"] = self.field_data[i]["Coordinates"] - center
+#            if periodic:
+#                self.field_data[i]["Coordinates"] = self.field_data[i]["Coordinates"] % box_size - box_size/2
             if not "SmoothingLength" in ptype.keys():
                 if verbose: print "Computing smoothing length for %s..." % pname.lower()
                 self.field_data[i]["SmoothingLength"] = np.max(spatial.cKDTree(self.field_data[i]["Coordinates"]).query(self.field_data[i]["Coordinates"], n_ngb)[0], axis = 1)
@@ -167,7 +176,7 @@ class SnapData:
     def ProjectionData(self, ptype=0, plane='z'):
         if len(self.field_data[ptype].keys())==0:
             return None
-        coords = self.field_data[ptype]["Coordinates"] - center
+        coords = self.field_data[ptype]["Coordinates"]
         masses = self.field_data[ptype]["Masses"]
         hsml = self.field_data[ptype]["SmoothingLength"]
         vel = self.field_data[ptype]["Velocities"]
@@ -228,7 +237,7 @@ class SnapData:
     def SliceData(self, ptype=0, plane='z'):
         if len(self.field_data[ptype].keys())==0:
             return None
-        coords = self.field_data[ptype]["Coordinates"] - center
+        coords = self.field_data[ptype]["Coordinates"]
         masses = self.field_data[ptype]["Masses"]
         hsml = self.field_data[ptype]["SmoothingLength"]
         vel = self.field_data[ptype]["Velocities"]

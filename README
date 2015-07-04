@@ -1,0 +1,15 @@
+GHOST: Gadget Hdf5 Output Slice and rayTrace
+
+    |\____
+  (:o ___/
+    |/
+
+GHOST is a tool for creating yt-like projection and slice plots of Gadget (or Gizmo) output snapshots without all the extra overhead (no trees are built except if smoothing lengths are needed!), using the SPH kernel to produce nice smooth plots.
+
+Some caveats:
+- This code has only been tested on isolated runs with vacuum boundary conditions; use on cosmo data at your own risk!
+- So far we assume the following system of units:
+	Unit length: 1kpc
+	Unit mass: 1e10 solar mass
+	Unit speed: 1km/s
+

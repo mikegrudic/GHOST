@@ -2,8 +2,8 @@
 """
 GHOST: Gadget Hdf5 Output Slice and rayTrace
 
-  |\___
-(:o ___(
+  |\____
+(:o ___/
   |/
   
 Usage:
@@ -18,6 +18,7 @@ Options:
     --antialiasing    Antialias plots at some cost to speed 
     --gridres=<N>     Resolution of slice/projection grid [default: 400]
     --neighbors=<N>   Number of neighbors used for smoothing length calculation [default: 32]
+    --np=<N>          Number of processors to run on. Please don't use up the whole head node. [default: 1]
 """
 
 from sys import argv, stdout
@@ -45,10 +46,11 @@ verbose = arguments["--verbose"]
 AA = arguments["--antialiasing"]
 n_ngb = int(arguments["--neighbors"])
 gridres = int(arguments["--gridres"])
+nproc = int(arguments["--np"])
 
 G = 4.3e4
 
-nums = np.int64([fn.split('_')[1].split('.')[0] for fn in filenames])
+nums = np.int_([fn.split('_')[1].split('.')[0] for fn in filenames])
 filenames = np.array(filenames)[np.argsort(nums)]
 
 @hope.jit
@@ -140,7 +142,7 @@ class SnapData:
             pname = {0:"Gas", 1:"DM", 2:"Disk", 3:"Bulge", 5:"BH", 4:"Stars"}[i]
             
             ptype = f["PartType%d" % i]
-            X = np.array(ptype["Coordinates"])
+            X = np.array(ptype["Coordinates"]) - center
             r[i] = np.sqrt(np.sum(X[:,:2]**2, axis=1))
             filter = r[i] <= 1.01*np.sqrt(2)*rmax #only need to look at particles that are in the window
             
@@ -165,7 +167,7 @@ class SnapData:
     def ProjectionData(self, ptype=0, plane='z'):
         if len(self.field_data[ptype].keys())==0:
             return None
-        coords = self.field_data[ptype]["Coordinates"]
+        coords = self.field_data[ptype]["Coordinates"] - center
         masses = self.field_data[ptype]["Masses"]
         hsml = self.field_data[ptype]["SmoothingLength"]
         vel = self.field_data[ptype]["Velocities"]
@@ -226,7 +228,7 @@ class SnapData:
     def SliceData(self, ptype=0, plane='z'):
         if len(self.field_data[ptype].keys())==0:
             return None
-        coords = self.field_data[ptype]["Coordinates"]
+        coords = self.field_data[ptype]["Coordinates"] - center
         masses = self.field_data[ptype]["Masses"]
         hsml = self.field_data[ptype]["SmoothingLength"]
         vel = self.field_data[ptype]["Velocities"]
@@ -301,8 +303,11 @@ def Make2DPlots(data, plane='z', show_particles=False):
             plt.clf()
     if verbose: print "kthxbai"    
 
-#Parallel(n_jobs=6)(delayed(MakePlot)(name) for name in filenames)
-for f in filenames:
-    print f
-    Make2DPlots(SnapData(f), plane=plane)
+
+# Here we actually run the code
+if nproc > 1 and len(filenames) > 1:
+    Parallel(n_jobs=np)(delayed(Make2DPlots)(f) for f in filenames)
+else:
+    [Make2DPlots(SnapData(f), plane=plane) for f in filenames]
+print "Done!"
 

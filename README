@@ -6,10 +6,32 @@ GHOST: Gadget Hdf5 Output Slice and rayTrace
 
 GHOST is a tool for creating yt-like projection and slice plots of Gadget (or Gizmo) output snapshots without all the extra overhead (no trees are built except if smoothing lengths are needed!), using the SPH kernel to produce nice smooth plots.
 
+Things you will need:
+numpy
+scipy
+yt (just for their lovely colormap)
+joblib if you want to run in parallel
+hope
+
+Basic usage example:
+GHOST.py "snapshot*.hdf5" --rmax=35.0
+
+For each particle type, you must specify the things that you want to plot in PlotSettings.py, as well as the range of your colormap.
+
+Currently implemented data fields include:
+"Density": Slice density/number density
+"Temperature": Slice gas temperature
+"SurfaceDensity": Projected surface density
+"SigmaV": line-of-sight velocity dispersion
+"KineticEnergy": KE surface density due to motion along the line of sight; equal to 0.5 * SurfaceDensity * SigmaV**2
+"Q": Toomre Q parameter using line of sight velocity dispersion, and the approximation that the epicyclic frequency is approximately the orbital frequency assuming a circular orbit about the origin.
+"SFDensity": Star formation surface density in solar masses/yr/pc^2
+
+
 Some caveats:
-- This code has only been tested on isolated runs with vacuum boundary conditions; use on cosmo data at your own risk!
+- This code has only been decently tested on isolated runs with vacuum boundary conditions; use on cosmo data at your own risk!
 - So far we assume the following system of units:
 	Unit length: 1kpc
 	Unit mass: 1e10 solar mass
 	Unit speed: 1km/s
-
+- When smoothing lengths must be calculated, we simply take the distance to the n_ngb'th nearest neighbor.

@@ -22,7 +22,6 @@ Options:
     --periodic        Whether the simulation is periodic
 """
 
-from sys import argv, stdout
 import matplotlib as mpl
 from PlotSettings import *
 mpl.use('Agg')
@@ -31,7 +30,6 @@ import h5py
 import numpy as np
 from yt.visualization import color_maps
 from scipy import spatial
-from joblib import Parallel, delayed, cpu_count
 from matplotlib.colors import LogNorm
 import re
 import hope
@@ -49,6 +47,9 @@ n_ngb = int(arguments["--neighbors"])
 gridres = int(arguments["--gridres"])
 nproc = int(arguments["--np"])
 periodic = arguments["--periodic"]
+
+if n_ngb > 1:
+    from joblib import Parallel, delayed, cpu_count
 
 G = 4.3e4
 

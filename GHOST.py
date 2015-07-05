@@ -25,10 +25,11 @@ Options:
 import matplotlib as mpl
 from PlotSettings import *
 mpl.use('Agg')
+mpl.rcParams['font.size']=12
 import matplotlib.pyplot as plt
 import h5py
 import numpy as np
-from yt.visualization import color_maps
+from yt.visualization import color_maps, plot_container
 from scipy import spatial
 from matplotlib.colors import LogNorm
 import re
@@ -128,7 +129,7 @@ def DepositDataToGrid3D(data, coords, N, hsml, gridres, rmax, griddata):
 
 class SnapData:
     def __init__(self, name):
-        print name
+        print(name)
         f = h5py.File(name, "r")
         header_toparse = f["Header"].attrs
         box_size = header_toparse["BoxSize"]
@@ -158,11 +159,11 @@ class SnapData:
 
             self.field_data[i]["Coordinates"] = X[filter]
             if not "SmoothingLength" in ptype.keys():
-                if verbose: print "Computing smoothing length for %s..." % pname.lower()
+                if verbose: print("Computing smoothing length for %s..." % pname.lower())
                 self.field_data[i]["SmoothingLength"] = np.max(spatial.cKDTree(self.field_data[i]["Coordinates"]).query(self.field_data[i]["Coordinates"], n_ngb)[0], axis = 1)
         f.close()
 
-        if verbose: print "Reticulating splines..."        
+        if verbose: print("Reticulating splines...")        
 
         X, Y = np.linspace(-rmax,rmax,gridres), np.linspace(-rmax,rmax,gridres)
         grid_dx = 2*rmax/(gridres-1)
@@ -212,7 +213,7 @@ class SnapData:
                 data_index["SFDensity"] = i
                 i += 1
 
-        if verbose: print "Summing projection kernels..."
+        if verbose: print("Summing projection kernels for type %d..."% ptype)
         griddata = np.zeros((gridres, gridres, len(field_data)))
 
         coords2d = coords[:,:2]
@@ -259,7 +260,7 @@ class SnapData:
         if "Temperature" in fields_toplot[ptype]:
             field_data.append(masses * self.field_data[ptype]["InternalEnergy"][filter] * 19964.9789829/401.27)
 
-        if verbose: print "Summing slice kernels..."
+        if verbose: print("Summing slice kernels for type %d..."%ptype)
         griddata = np.zeros((gridres, gridres, len(field_data)))
 
         DepositDataToGrid3D(np.vstack(field_data).T, coords, len(coords), hsml, gridres, rmax, griddata)
@@ -290,7 +291,7 @@ def Make2DPlots(data, plane='z', show_particles=False):
             
             zlabel = field_labels[field]
 
-            if verbose: print "Saving %s..."%plotname
+            if verbose: print("Saving %s..."%plotname)
     
             fig = plt.figure()
             ax = fig.add_subplot(111, axisbg='black')
@@ -309,7 +310,7 @@ def Make2DPlots(data, plane='z', show_particles=False):
             plt.savefig(plotname, bbox_inches='tight')
             plt.close(fig)
             plt.clf()
-    if verbose: print "kthxbai"    
+    if verbose: print("kthxbai")
 
 def MakePlot(f):
     data = SnapData(f)
@@ -320,5 +321,5 @@ if nproc > 1 and len(filenames) > 1:
     Parallel(n_jobs=nproc)(delayed(MakePlot)(f) for f in filenames)
 else:
     [MakePlot(f) for f in filenames]
-print "Done!"
+print("Done!")
 

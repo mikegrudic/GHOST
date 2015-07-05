@@ -17,7 +17,7 @@ hope
 Then just add GHOST.py to your path for easy access.
 
 Basic usage example:
-GHOST.py "snapshot*.hdf5" --rmax=35.0
+GHOST.py "snapshot*.hdf5" --rmax=35.0 --c=0.5,0.5,0.5
 
 For each particle type, you must specify the things that you want to plot in PlotSettings.py, as well as the range of your colormap.
 

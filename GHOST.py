@@ -18,8 +18,8 @@ Options:
     --antialiasing    Using antialiasing when sampling the grid data for the actual plot. Costs some speed.
     --gridres=<N>     Resolution of slice/projection grid [default: 400]
     --neighbors=<N>   Number of neighbors used for smoothing length calculation [default: 32]
-    --np=<N>          Number of processors to run on. Please don't use up the whole head node. [default: 1]
-    --periodic        Whether the simulation is periodic
+    --np=<N>          Number of processors to run on. [default: 1]
+    --periodic        Must use for simulations in a periodic box.
 """
 
 import matplotlib as mpl
@@ -29,7 +29,7 @@ mpl.rcParams['font.size']=12
 import matplotlib.pyplot as plt
 import h5py
 import numpy as np
-from yt.visualization import color_maps, plot_container
+from yt.visualization import color_maps
 from scipy import spatial
 from matplotlib.colors import LogNorm
 import re

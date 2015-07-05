@@ -6,12 +6,15 @@ GHOST: Gadget Hdf5 Output Slice and rayTrace
 
 GHOST is a tool for creating yt-like projection and slice plots of Gadget (or Gizmo) output snapshots without all the extra overhead (no trees are built except if smoothing lengths are needed!), using the SPH kernel to produce nice smooth plots.
 
-Things you will need:
+Installation:
+Make sure to have the following:
 numpy
 scipy
 yt (just for their lovely colormap)
 joblib if you want to run in parallel
 hope
+
+Then just add GHOST.py to your path for easy access.
 
 Basic usage example:
 GHOST.py "snapshot*.hdf5" --rmax=35.0

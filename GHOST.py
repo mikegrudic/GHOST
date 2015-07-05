@@ -29,7 +29,7 @@ mpl.use('Agg')
 import matplotlib.pyplot as plt
 import h5py
 import numpy as np
-import color_maps
+from yt.visualization import color_maps
 from scipy import spatial
 from joblib import Parallel, delayed, cpu_count
 from matplotlib.colors import LogNorm
@@ -127,6 +127,7 @@ def DepositDataToGrid3D(data, coords, N, hsml, gridres, rmax, griddata):
 
 class SnapData:
     def __init__(self, name):
+        print name
         f = h5py.File(name, "r")
         header_toparse = f["Header"].attrs
         box_size = header_toparse["BoxSize"]
@@ -134,7 +135,7 @@ class SnapData:
         
         particle_counts = header_toparse["NumPart_ThisFile"]
         
-        self.field_data = [{}, {}, {}, {}, {}]
+        self.field_data = [{}, {}, {}, {}, {}, {}]
         r = {}
         
         for i, n in enumerate(particle_counts):
@@ -155,9 +156,6 @@ class SnapData:
             r[i] = r[i][filter]
 
             self.field_data[i]["Coordinates"] = X[filter]
-#            self.field_data[i]["Coordinates"] = self.field_data[i]["Coordinates"] - center
-#            if periodic:
-#                self.field_data[i]["Coordinates"] = self.field_data[i]["Coordinates"] % box_size - box_size/2
             if not "SmoothingLength" in ptype.keys():
                 if verbose: print "Computing smoothing length for %s..." % pname.lower()
                 self.field_data[i]["SmoothingLength"] = np.max(spatial.cKDTree(self.field_data[i]["Coordinates"]).query(self.field_data[i]["Coordinates"], n_ngb)[0], axis = 1)
@@ -228,7 +226,7 @@ class SnapData:
         if "KineticEnergy" in fields_toplot[ptype]:
             outdict["KineticEnergy"] = 0.5 * 1e4 * griddata[:,:,data_index["SigmaV"]]
         if "Q" in fields_toplot[ptype]:
-            outdict["Q"] = np.sqrt(griddata[:,:,1]/griddata[:,:,0]) * (griddata[:,:,data_index["Q"]]/griddata[:,:,0]) / G / np.pi / griddata[:,:,0]
+            outdict["Q"] = np.sqrt(griddata[:,:,data_index["SigmaV"]]/griddata[:,:,0]) * (griddata[:,:,data_index["Q"]]/griddata[:,:,0]) / G / np.pi / griddata[:,:,0]
         if "SFDensity" in fields_toplot[ptype]:
             outdict["SFDensity"] = griddata[:,:,data_index["SFDensity"]] / 1e6
 
@@ -312,11 +310,14 @@ def Make2DPlots(data, plane='z', show_particles=False):
             plt.clf()
     if verbose: print "kthxbai"    
 
+def MakePlot(f):
+    data = SnapData(f)
+    Make2DPlots(data, plane)
 
 # Here we actually run the code
 if nproc > 1 and len(filenames) > 1:
-    Parallel(n_jobs=np)(delayed(Make2DPlots)(f) for f in filenames)
+    Parallel(n_jobs=nproc)(delayed(MakePlot)(f) for f in filenames)
 else:
-    [Make2DPlots(SnapData(f), plane=plane) for f in filenames]
+    [MakePlot(f) for f in filenames]
 print "Done!"
 

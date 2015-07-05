@@ -3,15 +3,16 @@ proj_fields = "SurfaceDensity", "SigmaV", "KineticEnergy", "Q", "SFDensity"
 slice_fields = "Density", "NumberDensity", "Temperature"
 
 # Fields to actually plot
-fields_toplot = {0: ["SigmaV", "KineticEnergy", "Q", "SurfaceDensity", "Temperature", "NumberDensity"],
-                 1: ["SurfaceDensity",],
+fields_toplot = {0: ["SFDensity","SigmaV", "KineticEnergy", "Q", "SurfaceDensity", "Temperature", "NumberDensity"],
+                 1: [],
                  2: [],
                  3: [],
-                 4: ["SurfaceDensity",]
+                 4: ["SurfaceDensity",],
+                 5: []
                  }
 
 # Colormap limits for each field
-field_limits = {"SurfaceDensity": [1e-1, 1e7],
+field_limits = {"SurfaceDensity": [1e-3, 1e3],
                 "Temperature": [10, 1e7],
                 "SigmaV": [1e-1, 1e4],
                 "Density":[1e-30,1e-18],
@@ -23,7 +24,7 @@ field_limits = {"SurfaceDensity": [1e-1, 1e7],
 #Plot labels for fields. Can contain TeX syntax
 field_labels = {"SurfaceDensity": "$\\Sigma$ $(\mathrm{M_\odot}/\mathrm{pc}^2)$",
                 "SigmaV": "$\\sigma_{zz}$ $(\mathrm{km/s})$",
-                "KineticEnergy": "$\\frac{\mathrm{d}T}{\mathrm{d}A}$ $(\mathrm{M_\odot} \mathrm{km}^2 {s}^{-2})$",
+                "KineticEnergy": "$\\frac{\mathrm{d}T}{\mathrm{d}A}$ $(\mathrm{M_\odot} \mathrm{km}^2 \mathrm{s}^{-2} \mathrm{pc}^{-2})$",
                 "NumberDensity": "$n$ $(\mathrm{cm}^{-3})$",
                 "Density": "$\\rho$ $(\mathrm{g} \mathrm{cm}^{-3}$",
                 "Temperature": "$T$ $(\mathrm{K})$",

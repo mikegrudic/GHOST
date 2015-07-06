@@ -4,7 +4,7 @@ slice_fields = "Density", "NumberDensity", "Temperature"
 
 # Fields to actually plot
 fields_toplot = {0: ["SFDensity","SigmaV", "KineticEnergy", "Q", "SurfaceDensity", "Temperature", "NumberDensity"],
-                 1: [],
+                 1: ["Density", "SurfaceDensity"],
                  2: [],
                  3: [],
                  4: ["SurfaceDensity",],
@@ -12,7 +12,7 @@ fields_toplot = {0: ["SFDensity","SigmaV", "KineticEnergy", "Q", "SurfaceDensity
                  }
 
 # Colormap limits for each field
-field_limits = {"SurfaceDensity": [1e-3, 1e3],
+field_limits = {"SurfaceDensity": [1e-1, 1e6],
                 "Temperature": [10, 1e7],
                 "SigmaV": [1e-1, 1e4],
                 "Density":[1e-30,1e-18],

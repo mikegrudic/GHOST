@@ -151,7 +151,7 @@ class SnapData:
             X = np.array(ptype["Coordinates"]) - center
             if periodic: X = (X + box_size/2)%box_size - box_size/2
             r[i] = np.sqrt(np.sum(X[:,:2]**2, axis=1))
-            filter = r[i] <= 1.01*np.sqrt(2)*rmax #only need to look at particles that are in the window
+            filter = np.max(np.abs(X), axis=1) <= 1.1*rmax #only need to look at particles that are in the window
             
             for key in ptype.keys():
                 self.field_data[i][key] = np.array(ptype[key])[filter]
@@ -251,14 +251,22 @@ class SnapData:
         grid_dx = 2*rmax/(gridres-1)
 
         #floor hsml at the Nyquist wavelength to avoid aliasing
-        hsml = np.clip(hsml, 2*grid_dx, 1e100)
+#        hsml = np.clip(hsml, 2*grid_dx, 1e100)
 
         filter = np.abs(coords[:,2]) < hsml
         coords, masses, hsml = coords[filter], masses[filter], hsml[filter]
 
+        hsml_plane = np.sqrt(hsml**2 - coords[:,2]**2)
+        hsml[hsml_plane < grid_dx] = np.sqrt(grid_dx**2 + coords[:,2][hsml_plane < grid_dx]**2)
+
         field_data = [masses,]
         if "Temperature" in fields_toplot[ptype]:
-            field_data.append(masses * self.field_data[ptype]["InternalEnergy"][filter] * 19964.9789829/401.27)
+            gamma = 5.0/3.0
+            x_H = 0.76
+            a_e = self.field_data[ptype]['ElectronAbundance'][filter]
+            mu = 4.0 / (3.0 * x_H + 1.0 + 4.0 * x_H * a_e)
+            field_data.append(masses*self.field_data[ptype]["InternalEnergy"][filter]*1e10*mu*(gamma-1)*1.211e-8)
+ #           field_data.append(masses * self.field_data[ptype]["InternalEnergy"][filter] * 19964.9789829/401.27)
 
         if verbose: print("Summing slice kernels for type %d..."%ptype)
         griddata = np.zeros((gridres, gridres, len(field_data)))
@@ -270,6 +278,7 @@ class SnapData:
         outdict["NumberDensity"] = outdict["Density"] * 5.97e23
         if "Temperature" in fields_toplot[ptype]:
             outdict["Temperature"] = griddata[:,:,1]/griddata[:,:,0]
+            outdict["Temperature"][griddata[:,:,1]==0] = np.nan
 
         return outdict
 

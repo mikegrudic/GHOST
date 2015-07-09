@@ -8,25 +8,29 @@ GHOST: Gadget Hdf5 Output Slice and rayTrace
   
 Usage:
 GHOST.py <files> ... [options]
+GHOST.py <files> ... --CoreSigma [options]
 
 Options:
     -h --help         Show this screen.
     --rmax=<kpc>      Maximum radius of plot window [default: 1.0]
     --plane=<x,y,z>   Slice/projection plane [default: z]
     --c=<cx,cy,cz>    Coordinates of plot window center [default: 0.0,0.0,0.0]
+    --cmap=<name>     Name of colormap to use [default: algae]
     --verbose         Verbose output
     --antialiasing    Using antialiasing when sampling the grid data for the actual plot. Costs some speed.
     --gridres=<N>     Resolution of slice/projection grid [default: 400]
     --neighbors=<N>   Number of neighbors used for smoothing length calculation [default: 32]
     --np=<N>          Number of processors to run on. [default: 1]
     --periodic        Must use for simulations in a periodic box.
+    --CoreSigma       Make a plot of central surface density vs. time
 """
 
 import matplotlib as mpl
 from PlotSettings import *
 mpl.use('Agg')
-mpl.rcParams['font.size']=12
+#mpl.rcParams['font.size']=12
 import matplotlib.pyplot as plt
+#from SnapData import *
 import h5py
 import numpy as np
 from yt.visualization import color_maps
@@ -48,6 +52,8 @@ n_ngb = int(arguments["--neighbors"])
 gridres = int(arguments["--gridres"])
 nproc = int(arguments["--np"])
 periodic = arguments["--periodic"]
+CoreSigma = arguments["--CoreSigma"]
+colormap = arguments["--cmap"]
 
 if n_ngb > 1:
     from joblib import Parallel, delayed, cpu_count
@@ -92,8 +98,26 @@ def DepositDataToGrid(data, coords, N, hsml, gridres, rmax, griddata):
     griddata[:] = norm*griddata[:]
 
 @hope.jit
+def DepositDataToPoint(data, coords, N, hsml, X):
+    norm = 1.8189136353359467 # 40 / (7 pi) for 2D
+
+    Xdata = 0.0
+    for i in xrange(N):
+        h = hsml[i]
+        mh2 = data[i]/h**2
+        x = coords[i,0] - X[0]
+        y = coords[i,1] - X[1]
+        q = np.sqrt(x**2 + y**2)/h
+        if q <= 0.5:
+            Xdata += (1 - 6*q**2 + 6*q**3) * mh2
+        elif q <= 1.0:
+            Xdata += (2*(1-q)**3) * mh2                
+
+    return norm*Xdata
+
+@hope.jit
 def DepositDataToGrid3D(data, coords, N, hsml, gridres, rmax, griddata):
-    norm =  2.5464790894703255 #8/np.pi for 3D
+    norm =  2*2.5464790894703255 #8/np.pi for 3D
     grid_dx = 2*rmax/(gridres-1)
     zSqr = coords[:,2]*coords[:,2]
     hsml_plane = np.sqrt(hsml[:]*hsml[:] - zSqr)
@@ -151,7 +175,7 @@ class SnapData:
             X = np.array(ptype["Coordinates"]) - center
             if periodic: X = (X + box_size/2)%box_size - box_size/2
             r[i] = np.sqrt(np.sum(X[:,:2]**2, axis=1))
-            filter = np.max(np.abs(X), axis=1) <= 1.1*rmax #only need to look at particles that are in the window
+            filter = np.max(np.abs(X), axis=1) <= 1e100
             
             for key in ptype.keys():
                 self.field_data[i][key] = np.array(ptype[key])[filter]
@@ -177,19 +201,22 @@ class SnapData:
         if len(self.field_data[ptype].keys())==0:
             return None
         coords = self.field_data[ptype]["Coordinates"]
-        masses = self.field_data[ptype]["Masses"]
-        hsml = self.field_data[ptype]["SmoothingLength"]
         vel = self.field_data[ptype]["Velocities"]
-
-        grid_dx = 2*rmax/(gridres-1)
-        #floor smoothing length at the Nyquist wavelength to avoid aliasing
-        hsml = np.clip(hsml, grid_dx, 1e100)
 
         if plane != 'z':
             x, y, z = coords.T
             coords = {"x": np.c_[y,z,x], "y": np.c_[x,z,y]}[plane]
             vx, vy, vz = vel.T
             vel = {"x": np.c_[vy,vz,vx], "y": np.c_[vx,vz,vy]}[plane]
+
+        filter = np.max(np.abs(coords[:,:2]),1) <= 1.1*rmax
+        coords, vel = coords[filter], vel[filter]
+        hsml = self.field_data[ptype]["SmoothingLength"][filter]
+        masses = self.field_data[ptype]["Masses"][filter]
+
+        grid_dx = 2*rmax/(gridres-1)
+        #floor smoothing length at the Nyquist wavelength to avoid aliasing
+        hsml = np.clip(hsml, grid_dx, 1e100)
 
         field_data = [masses,]
 
@@ -203,12 +230,12 @@ class SnapData:
             i+=1
         if ptype==0:
             if "Q" in  fields_toplot[ptype]:
-                omega = np.abs((vel[:,0] * coords[:,1] - vel[:,1] * coords[:,0])/self.r[ptype]**2)
+                omega = np.abs((vel[:,0] * coords[:,1] - vel[:,1] * coords[:,0])/self.r[ptype][filter]**2)
                 field_data.append(masses*omega)
                 data_index["Q"] = i
                 i+=1
             if "SFDensity" in fields_toplot[ptype]:
-                sfr = self.field_data[0]["StarFormationRate"]
+                sfr = self.field_data[0]["StarFormationRate"][filter]
                 field_data.append(sfr)
                 data_index["SFDensity"] = i
                 i += 1
@@ -251,13 +278,11 @@ class SnapData:
         grid_dx = 2*rmax/(gridres-1)
 
         #floor hsml at the Nyquist wavelength to avoid aliasing
-#        hsml = np.clip(hsml, 2*grid_dx, 1e100)
-
         filter = np.abs(coords[:,2]) < hsml
         coords, masses, hsml = coords[filter], masses[filter], hsml[filter]
 
         hsml_plane = np.sqrt(hsml**2 - coords[:,2]**2)
-        hsml[hsml_plane < grid_dx] = np.sqrt(grid_dx**2 + coords[:,2][hsml_plane < grid_dx]**2)
+        hsml[hsml_plane < grid_dx] = 2*np.sqrt(grid_dx**2 + coords[:,2][hsml_plane < grid_dx]**2)
 
         field_data = [masses,]
         if "Temperature" in fields_toplot[ptype]:
@@ -266,7 +291,8 @@ class SnapData:
             a_e = self.field_data[ptype]['ElectronAbundance'][filter]
             mu = 4.0 / (3.0 * x_H + 1.0 + 4.0 * x_H * a_e)
             field_data.append(masses*self.field_data[ptype]["InternalEnergy"][filter]*1e10*mu*(gamma-1)*1.211e-8)
- #           field_data.append(masses * self.field_data[ptype]["InternalEnergy"][filter] * 19964.9789829/401.27)
+        if ptype==0 and "Density" in fields_toplot[ptype] or "NumberDensity" in fields_toplot[ptype]:
+            field_data.append(masses*self.field_data[ptype]["Density"][filter])
 
         if verbose: print("Summing slice kernels for type %d..."%ptype)
         griddata = np.zeros((gridres, gridres, len(field_data)))
@@ -274,7 +300,7 @@ class SnapData:
         DepositDataToGrid3D(np.vstack(field_data).T, coords, len(coords), hsml, gridres, rmax, griddata)
 
         outdict = {}
-        outdict["Density"] = griddata[:,:,0] * 6.768e-22
+        outdict["Density"] = griddata[:,:,2]/griddata[:,:,0] * 6.768e-22
         outdict["NumberDensity"] = outdict["Density"] * 5.97e23
         if "Temperature" in fields_toplot[ptype]:
             outdict["Temperature"] = griddata[:,:,1]/griddata[:,:,0]
@@ -282,12 +308,24 @@ class SnapData:
 
         return outdict
 
+    def CentralSurfaceDensity(self):
+        sigma = 0.0
+        if verbose: print("Computing central surface density")
+        for i in xrange(6):
+            if i > 0: break
+            #if len(self.field_data[i].keys())==0: continue
+            else:
+                s0 = DepositDataToPoint(self.field_data[i]["Masses"], self.field_data[i]["Coordinates"], len(self.field_data[i]["Masses"]), self.field_data[i]["SmoothingLength"], np.array([0.0,0.0]))
+                sigma += s0
+        return sigma
+
 def Make2DPlots(data, plane='z', show_particles=False):
     X, Y = data.X, data.Y
     for type in fields_toplot:
-        projdata = data.ProjectionData(type, plane)
-#    if sum([f in slice_fields for f in fields]):
-        slicedata = data.SliceData(type, plane)
+        if sum([f in proj_fields for f in fields_toplot[type]]):
+            projdata = data.ProjectionData(type, plane)
+        if sum([f in slice_fields for f in fields_toplot[type]]):            
+            slicedata = data.SliceData(type, plane)
         
         for field in fields_toplot[type]:
             plotname = "%s_%s_PartType%s_r%g_%s.png"%(field, data.num, type, rmax, plane)
@@ -305,7 +343,7 @@ def Make2DPlots(data, plane='z', show_particles=False):
             fig = plt.figure()
             ax = fig.add_subplot(111, axisbg='black')
             ax.set_aspect('equal')
-            plot = ax.pcolormesh(X, Y, Z, norm=LogNorm(field_limits[field][0],field_limits[field][1]), antialiased=AA)
+            plot = ax.pcolormesh(X, Y, Z, norm=LogNorm(field_limits[field][0],field_limits[field][1]), antialiased=AA, cmap=colormap)
             bar = plt.colorbar(plot, pad=0.0)
             bar.set_label(zlabel)
             if show_particles:
@@ -326,9 +364,21 @@ def MakePlot(f):
     Make2DPlots(data, plane)
 
 # Here we actually run the code
-if nproc > 1 and len(filenames) > 1:
-    Parallel(n_jobs=nproc)(delayed(MakePlot)(f) for f in filenames)
+if CoreSigma:
+    t = []
+    sigma = []
+    for f in filenames:
+        print f
+        data = SnapData(f)
+        t.append(data.time*979)
+        sigma.append(data.CentralSurfaceDensity() * 1e4)
+        print t[-1], sigma[-1]
+    plt.plot(t, sigma)
+    plt.savefig("CoreSigma")
 else:
-    [MakePlot(f) for f in filenames]
-print("Done!")
+    if nproc > 1 and len(filenames) > 1:
+        Parallel(n_jobs=nproc)(delayed(MakePlot)(f) for f in filenames)
+    else:
+        [MakePlot(f) for f in filenames]
+    print("Done!")
 

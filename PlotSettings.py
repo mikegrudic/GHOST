@@ -3,11 +3,11 @@ proj_fields = "SurfaceDensity", "SigmaV", "KineticEnergy", "Q", "SFDensity"
 slice_fields = "Density", "NumberDensity", "Temperature"
 
 # Fields to actually plot
-fields_toplot = {0: ["SFDensity","SigmaV", "KineticEnergy", "Q", "SurfaceDensity", "Temperature", "NumberDensity"],
-                 1: ["Density", "SurfaceDensity"],
+fields_toplot = {0: ["NumberDensity", "Temperature"],
+                 1: ["SurfaceDensity",],
                  2: [],
                  3: [],
-                 4: ["SurfaceDensity",],
+                 4: [],
                  5: []
                  }
 
@@ -16,7 +16,7 @@ field_limits = {"SurfaceDensity": [1e-1, 1e6],
                 "Temperature": [10, 1e7],
                 "SigmaV": [1e-1, 1e4],
                 "Density":[1e-30,1e-18],
-                "NumberDensity":[1e0, 1e6],
+                "NumberDensity":[1e0, 1e11],
                 "KineticEnergy": [1e1, 1e7],
                 "Q": [1e-1,1e3],
                 "SFDensity" : [1e-8, 10]}

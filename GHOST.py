@@ -223,7 +223,7 @@ class SnapData:
         data_index = {"SurfaceDensity": 0,}
 
         i = 1        
-        if "SigmaV" in fields_toplot[ptype] or "Q" in fields_toplot[ptype]:
+        if "SigmaV" in fields_toplot[ptype] or "Q" in fields_toplot[ptype] or "KineticEnergy" in fields_toplot[ptype]:
             vzSqr = vel[:,2]**2
             field_data.append(masses*vzSqr)
             data_index["SigmaV"] = i
@@ -239,6 +239,13 @@ class SnapData:
                 field_data.append(sfr)
                 data_index["SFDensity"] = i
                 i += 1
+            if "MagEnergySurfaceDensity" in fields_toplot[ptype]:
+                B = self.field_data[0]["MagneticField"][filter]
+                sigmaB = np.sum(B**2/2, axis=1) * 2.938e55
+                field_data.append(sigmaB)
+                data_index["MagEnergySurfaceDensity"] = i
+                i+= 1
+                
 
         if verbose: print("Summing projection kernels for type %d..."% ptype)
         griddata = np.zeros((gridres, gridres, len(field_data)))
@@ -253,9 +260,11 @@ class SnapData:
         if "SigmaV" in fields_toplot[ptype]:
             outdict["SigmaV"] = np.sqrt(griddata[:,:,data_index["SigmaV"]]/griddata[:,:,0])
         if "KineticEnergy" in fields_toplot[ptype]:
-            outdict["KineticEnergy"] = 0.5 * 1e4 * griddata[:,:,data_index["SigmaV"]]
+            outdict["KineticEnergy"] = 0.5 * griddata[:,:,data_index["SigmaV"]] * 1.988e47
         if "Q" in fields_toplot[ptype]:
             outdict["Q"] = np.sqrt(griddata[:,:,data_index["SigmaV"]]/griddata[:,:,0]) * (griddata[:,:,data_index["Q"]]/griddata[:,:,0]) / G / np.pi / griddata[:,:,0]
+        if "MagEnergySurfaceDensity" in fields_toplot[ptype]:
+            outdict["MagEnergySurfaceDensity"] = griddata[:,:,data_index["MagEnergySurfaceDensity"]] / 1e6
         if "SFDensity" in fields_toplot[ptype]:
             outdict["SFDensity"] = griddata[:,:,data_index["SFDensity"]] / 1e6
 
@@ -277,12 +286,13 @@ class SnapData:
 
         grid_dx = 2*rmax/(gridres-1)
 
+#        hsml = 2*~hsml
         #floor hsml at the Nyquist wavelength to avoid aliasing
         filter = np.abs(coords[:,2]) < hsml
         coords, masses, hsml = coords[filter], masses[filter], hsml[filter]
 
         hsml_plane = np.sqrt(hsml**2 - coords[:,2]**2)
-        hsml[hsml_plane < grid_dx] = 2*np.sqrt(grid_dx**2 + coords[:,2][hsml_plane < grid_dx]**2)
+        hsml[hsml_plane < grid_dx] = np.sqrt(grid_dx**2 + coords[:,2][hsml_plane < grid_dx]**2)
 
         field_data = [masses,]
         if "Temperature" in fields_toplot[ptype]:
@@ -300,8 +310,9 @@ class SnapData:
         DepositDataToGrid3D(np.vstack(field_data).T, coords, len(coords), hsml, gridres, rmax, griddata)
 
         outdict = {}
-        outdict["Density"] = griddata[:,:,2]/griddata[:,:,0] * 6.768e-22
-        outdict["NumberDensity"] = outdict["Density"] * 5.97e23
+        if "Density" in fields_toplot[ptype] or "NumberDensity" in fields_toplot[ptype]:
+            outdict["Density"] = griddata[:,:,2]/griddata[:,:,0] * 6.768e-22
+            outdict["NumberDensity"] = outdict["Density"] * 5.97e23
         if "Temperature" in fields_toplot[ptype]:
             outdict["Temperature"] = griddata[:,:,1]/griddata[:,:,0]
             outdict["Temperature"][griddata[:,:,1]==0] = np.nan

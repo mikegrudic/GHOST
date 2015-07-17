@@ -23,6 +23,7 @@ Options:
     --np=<N>          Number of processors to run on. [default: 1]
     --periodic        Must use for simulations in a periodic box.
     --CoreSigma       Make a plot of central surface density vs. time
+    --imshow          Make an image without any axes
 """
 
 import matplotlib as mpl
@@ -30,10 +31,12 @@ from PlotSettings import *
 mpl.use('Agg')
 #mpl.rcParams['font.size']=12
 import matplotlib.pyplot as plt
+from PIL import Image, ImageDraw, ImageFont
 #from SnapData import *
 import h5py
 import numpy as np
 from yt.visualization import color_maps
+import option_d
 from scipy import spatial
 from matplotlib.colors import LogNorm
 import re
@@ -54,6 +57,9 @@ nproc = int(arguments["--np"])
 periodic = arguments["--periodic"]
 CoreSigma = arguments["--CoreSigma"]
 colormap = arguments["--cmap"]
+imshow = arguments["--imshow"]
+
+font = ImageFont.truetype("LiberationSans-Regular.ttf", gridres/12)
 
 if n_ngb > 1:
     from joblib import Parallel, delayed, cpu_count
@@ -354,18 +360,29 @@ def Make2DPlots(data, plane='z', show_particles=False):
             fig = plt.figure()
             ax = fig.add_subplot(111, axisbg='black')
             ax.set_aspect('equal')
-            plot = ax.pcolormesh(X, Y, Z, norm=LogNorm(field_limits[field][0],field_limits[field][1]), antialiased=AA, cmap=colormap)
-            bar = plt.colorbar(plot, pad=0.0)
-            bar.set_label(zlabel)
-            if show_particles:
-                X = data.field_data[type]["Coordinates"]
-                ax.scatter(X[:,0], X[:,1], s=1)
-            ax.set_xlim([-rmax,rmax])
-            ax.set_ylim([-rmax,rmax])
-            ax.set_xlabel("$x$ $(\mathrm{kpc})$")
-            ax.set_ylabel("$y$ $(\mathrm{kpc})$")
-            plt.title("$t = %g\\mathrm{Myr}$"%(data.time*979))
-            plt.savefig(plotname, bbox_inches='tight')
+            if imshow:
+                Z[Z==0] = Z[Z>0].min()
+                
+                mpl.image.imsave(plotname, np.log10(Z), cmap=colormap, vmin=np.log10(field_limits[field][0]), vmax=np.log10(field_limits[field][1]))
+                F = Image.open(plotname)
+                draw = ImageDraw.Draw(F)
+                draw.line(((gridres/16, 7*gridres/8), (gridres*5/16, 7*gridres/8)), fill="#FFFFFF", width=6)
+                draw.text((gridres/16, 7*gridres/8 + 5), "%gpc"%(rmax*250), font=font)
+                F.save(plotname)
+                F.close()
+            else:
+                plot = ax.pcolormesh(X, Y, Z, norm=LogNorm(field_limits[field][0],field_limits[field][1]), antialiased=AA, cmap=colormap)
+                bar = plt.colorbar(plot, pad=0.0)
+                bar.set_label(zlabel)
+                if show_particles:
+                    X = data.field_data[type]["Coordinates"]
+                    ax.scatter(X[:,0], X[:,1], s=1)
+                ax.set_xlim([-rmax,rmax])
+                ax.set_ylim([-rmax,rmax])
+                ax.set_xlabel("$x$ $(\mathrm{kpc})$")
+                ax.set_ylabel("$y$ $(\mathrm{kpc})$")
+                plt.title("$t = %g\\mathrm{Myr}$"%(data.time*979))
+                plt.savefig(plotname, bbox_inches='tight')
             plt.close(fig)
             plt.clf()
     if verbose: print("kthxbai")

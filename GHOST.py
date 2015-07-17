@@ -301,13 +301,13 @@ class SnapData:
         hsml[hsml_plane < grid_dx] = np.sqrt(grid_dx**2 + coords[:,2][hsml_plane < grid_dx]**2)
 
         field_data = [masses,]
-        if "Temperature" in fields_toplot[ptype]:
+        if "JeansMass" in fields_toplot[ptype] or "Temperature" in fields_toplot[ptype]:
             gamma = 5.0/3.0
             x_H = 0.76
             a_e = self.field_data[ptype]['ElectronAbundance'][filter]
             mu = 4.0 / (3.0 * x_H + 1.0 + 4.0 * x_H * a_e)
             field_data.append(masses*self.field_data[ptype]["InternalEnergy"][filter]*1e10*mu*(gamma-1)*1.211e-8)
-        if ptype==0 and "Density" in fields_toplot[ptype] or "NumberDensity" in fields_toplot[ptype]:
+        if ptype==0 and "Density" in fields_toplot[ptype] or "NumberDensity" in fields_toplot[ptype] or "JeansMass" in fields_toplot[ptype]:
             field_data.append(masses*self.field_data[ptype]["Density"][filter])
 
         if verbose: print("Summing slice kernels for type %d..."%ptype)
@@ -316,12 +316,14 @@ class SnapData:
         DepositDataToGrid3D(np.vstack(field_data).T, coords, len(coords), hsml, gridres, rmax, griddata)
 
         outdict = {}
-        if "Density" in fields_toplot[ptype] or "NumberDensity" in fields_toplot[ptype]:
+        if "Density" in fields_toplot[ptype] or "NumberDensity" in fields_toplot[ptype] or "JeansMass" in fields_toplot[ptype]:
             outdict["Density"] = griddata[:,:,2]/griddata[:,:,0] * 6.768e-22
             outdict["NumberDensity"] = outdict["Density"] * 5.97e23
         if "Temperature" in fields_toplot[ptype]:
             outdict["Temperature"] = griddata[:,:,1]/griddata[:,:,0]
             outdict["Temperature"][griddata[:,:,1]==0] = np.nan
+        if "JeansMass" in fields_toplot[ptype]:
+            outdict["JeansMass"] = 45*outdict["Temperature"]**1.5 * outdict["NumberDensity"]**(-0.5)
 
         return outdict
 

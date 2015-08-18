@@ -301,14 +301,30 @@ class SnapData:
         hsml[hsml_plane < grid_dx] = np.sqrt(grid_dx**2 + coords[:,2][hsml_plane < grid_dx]**2)
 
         field_data = [masses,]
+        data_index = {"Density": 0,}
+        i = 1
         if "JeansMass" in fields_toplot[ptype] or "Temperature" in fields_toplot[ptype]:
             gamma = 5.0/3.0
             x_H = 0.76
-            a_e = self.field_data[ptype]['ElectronAbundance'][filter]
+            if 'ElectronAbundance' in self.field_data[ptype].keys():
+                a_e = self.field_data[ptype]['ElectronAbundance'][filter]
+            else:
+                a_e = 0.0
             mu = 4.0 / (3.0 * x_H + 1.0 + 4.0 * x_H * a_e)
             field_data.append(masses*self.field_data[ptype]["InternalEnergy"][filter]*1e10*mu*(gamma-1)*1.211e-8)
-        if ptype==0 and "Density" in fields_toplot[ptype] or "NumberDensity" in fields_toplot[ptype] or "JeansMass" in fields_toplot[ptype]:
-            field_data.append(masses*self.field_data[ptype]["Density"][filter])
+            data_index["Temperature"] = i
+            i+=1
+        for B in "B_x","B_y","B_z":
+            if B in fields_toplot[ptype]:
+                field_data.append(masses * self.field_data[ptype]["MagneticField"][:,{"B_x":0, "B_y": 1, "B_z":2}[B]][filter])
+                data_index[B] = i
+                i += 1
+        if "B" in fields_toplot[ptype]:
+            field_data.append(masses * np.sum(self.field_data[ptype]["MagneticField"][filter]**2, axis=1)**0.5)
+            data_index["B"] = i
+            i += 1
+#        if ptype==0 and "Density" in fields_toplot[ptype] or "NumberDensity" in fields_toplot[ptype] or "JeansMass" in fields_toplot[ptype]:
+#            field_data.append(masses*self.field_data[ptype]["Density"][filter])
 
         if verbose: print("Summing slice kernels for type %d..."%ptype)
         griddata = np.zeros((gridres, gridres, len(field_data)))
@@ -316,15 +332,19 @@ class SnapData:
         DepositDataToGrid3D(np.vstack(field_data).T, coords, len(coords), hsml, gridres, rmax, griddata)
 
         outdict = {}
+
+        #regorganize this into an iteration over the keys of data_index
         if "Density" in fields_toplot[ptype] or "NumberDensity" in fields_toplot[ptype] or "JeansMass" in fields_toplot[ptype]:
-            outdict["Density"] = griddata[:,:,2]/griddata[:,:,0] * 6.768e-22
+            outdict["Density"] = griddata[:,:,0] * 6.768e-22
             outdict["NumberDensity"] = outdict["Density"] * 5.97e23
         if "Temperature" in fields_toplot[ptype]:
             outdict["Temperature"] = griddata[:,:,1]/griddata[:,:,0]
             outdict["Temperature"][griddata[:,:,1]==0] = np.nan
         if "JeansMass" in fields_toplot[ptype]:
             outdict["JeansMass"] = 45*outdict["Temperature"]**1.5 * outdict["NumberDensity"]**(-0.5)
-
+        for B in "B_x","B_y","B_z", "B":
+            if B in fields_toplot[ptype]:
+                outdict[B] = griddata[:,:,data_index[B]]/griddata[:,:,0]
         return outdict
 
     def CentralSurfaceDensity(self):
@@ -362,10 +382,14 @@ def Make2DPlots(data, plane='z', show_particles=False):
             fig = plt.figure()
             ax = fig.add_subplot(111, axisbg='black')
             ax.set_aspect('equal')
+            zmin, zmax = field_limits[field]
             if imshow:
-                Z[Z==0] = Z[Z>0].min()
-                
-                mpl.image.imsave(plotname, np.log10(Z), cmap=colormap, vmin=np.log10(field_limits[field][0]), vmax=np.log10(field_limits[field][1]))
+                if np.sum(Z==0)*np.prod(1-(Z==0)):
+                    Z[Z==0] = Z[Z>0].min()
+                if zmin > 0:
+                    mpl.image.imsave(plotname, np.log10(np.abs(Z)), cmap=colormap, vmin=np.log10(field_limits[field][0]), vmax=np.log10(field_limits[field][1]))
+                else:
+                    mpl.image.imsave(plotname, Z, cmap="RdBu", vmin=field_limits[field][0], vmax=field_limits[field][1])
                 F = Image.open(plotname)
                 draw = ImageDraw.Draw(F)
                 draw.line(((gridres/16, 7*gridres/8), (gridres*5/16, 7*gridres/8)), fill="#FFFFFF", width=6)
@@ -373,7 +397,10 @@ def Make2DPlots(data, plane='z', show_particles=False):
                 F.save(plotname)
                 F.close()
             else:
-                plot = ax.pcolormesh(X, Y, Z, norm=LogNorm(field_limits[field][0],field_limits[field][1]), antialiased=AA, cmap=colormap)
+                if zmin > 0:
+                    plot = ax.pcolormesh(X, Y, Z, norm=LogNorm(field_limits[field][0],field_limits[field][1]), antialiased=AA, cmap=colormap)
+                else:
+                    plot = ax.pcolormesh(X, Y, Z, vmin=zmin, vmax=zmax, antialiased=AA, cmap="RdBu")
                 bar = plt.colorbar(plot, pad=0.0)
                 bar.set_label(zlabel)
                 if show_particles:

@@ -3,11 +3,11 @@ proj_fields = "SurfaceDensity", "SigmaV", "KineticEnergy", "Q", "SFDensity", "Ma
 slice_fields = "Density", "NumberDensity", "Temperature", "MagEnergyDensity", "JeansMass", "B_z", "B_x", "B_y", "B"
 
 # Fields to actually plot
-fields_toplot = {0: ["B"],
+fields_toplot = {0: ["SurfaceDensity",],
                  1: [],
                  2: [],
                  3: [],
-                 4: [],
+                 4: ["SurfaceDensity"],
                  5: []
                  }
 
@@ -16,7 +16,7 @@ field_limits = {"SurfaceDensity": [1e0, 1e6],
                 "B_z": [1e-5, 1e-2],
                 "B_x": [1e-5, 1e-2],
                 "B_y":[1e-5, 1e-2],
-                "B": [1e-5, 1e-2],
+                "B": [1e-5, 10],
                 "Temperature": [10, 1e7],
                 "SigmaV": [1e-1, 1e4],
                 "Density":[1e-23,1e-17],
@@ -24,7 +24,7 @@ field_limits = {"SurfaceDensity": [1e0, 1e6],
                 "KineticEnergy": [1e40, 1e60],
                 "Q": [1e-1,1e3],
                 "SFDensity" : [1e-8, 10],
-                "MagEnergySurfaceDensity": [1e40, 1e60],
+                "MagEnergySurfaceDensity": [1e46, 1e60],
                 "JeansMass": [1, 1e6]}
 
 #Plot labels for fields. Can contain TeX syntax

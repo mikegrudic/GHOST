@@ -292,7 +292,7 @@ class SnapData:
 
         grid_dx = 2*rmax/(gridres-1)
 
-#        hsml = 2*~hsml
+#        hsml = 2*hsml
         #floor hsml at the Nyquist wavelength to avoid aliasing
         filter = np.abs(coords[:,2]) < hsml
         coords, masses, hsml = coords[filter], masses[filter], hsml[filter]
@@ -384,9 +384,12 @@ def Make2DPlots(data, plane='z', show_particles=False):
             ax.set_aspect('equal')
             zmin, zmax = field_limits[field]
             if imshow:
-                if np.sum(Z==0)*np.prod(1-(Z==0)):
-                    Z[Z==0] = Z[Z>0].min()
+                if  len(Z)>1:
+                    if not np.prod(Z<=0):
+                        Z[Z==0] = Z[Z>0].min()
+                    
                 if zmin > 0:
+                    print Z.min()
                     mpl.image.imsave(plotname, np.log10(np.abs(Z)), cmap=colormap, vmin=np.log10(field_limits[field][0]), vmax=np.log10(field_limits[field][1]))
                 else:
                     mpl.image.imsave(plotname, Z, cmap="RdBu", vmin=field_limits[field][0], vmax=field_limits[field][1])

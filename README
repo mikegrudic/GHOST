@@ -19,6 +19,8 @@ Then just add GHOST.py to your path for easy access.
 Basic usage example:
 GHOST.py "snapshot*.hdf5" --rmax=35.0 --c=0.5,0.5,0.5
 
+This would make all of the plots specified in PlotSettings.py for every snapshot file. The bounds of the plot window would be [-35kpc,35kpc] and it would be centered on the point [0.5,0.5,0.5].
+
 For each particle type, you must specify the things that you want to plot in PlotSettings.py, as well as the range of your colormap.
 
 Currently implemented data fields include:

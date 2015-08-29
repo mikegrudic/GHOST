@@ -40,6 +40,7 @@ import option_d
 from scipy import spatial
 from matplotlib.colors import LogNorm
 import re
+import DensityHsml
 import hope
 from docopt import docopt
 hope.config.optimize = True
@@ -190,7 +191,7 @@ class SnapData:
             self.field_data[i]["Coordinates"] = X[filter]
             if not "SmoothingLength" in ptype.keys():
                 if verbose: print("Computing smoothing length for %s..." % pname.lower())
-                self.field_data[i]["SmoothingLength"] = np.max(spatial.cKDTree(self.field_data[i]["Coordinates"]).query(self.field_data[i]["Coordinates"], n_ngb)[0], axis = 1)
+                self.field_data[i]["SmoothingLength"] = DensityHsml.GetHsml(self.field_data[i]["Coordinates"])
         f.close()
 
         if verbose: print("Reticulating splines...")        

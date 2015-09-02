@@ -3,7 +3,7 @@ proj_fields = "SurfaceDensity", "SigmaV", "KineticEnergy", "Q", "SFDensity", "Ma
 slice_fields = "Density", "NumberDensity", "Temperature", "MagEnergyDensity", "JeansMass", "B_z", "B_x", "B_y", "B"
 
 # Fields to actually plot
-fields_toplot = {0: ["SurfaceDensity",],
+fields_toplot = {0: ["SurfaceDensity"],
                  1: [],
                  2: [],
                  3: [],
@@ -12,7 +12,7 @@ fields_toplot = {0: ["SurfaceDensity",],
                  }
 
 # Colormap limits for each field
-field_limits = {"SurfaceDensity": [1e0, 1e6],
+field_limits = {"SurfaceDensity": [1, 1e6],
                 "B_z": [1e-5, 1e-2],
                 "B_x": [1e-5, 1e-2],
                 "B_y":[1e-5, 1e-2],
@@ -32,7 +32,7 @@ field_labels = {"SurfaceDensity": "$\\Sigma$ $(\mathrm{M_\odot}/\mathrm{pc}^2)$"
                 "SigmaV": "$\\sigma_{zz}$ $(\mathrm{km/s})$",
                 "KineticEnergy": "$\\frac{\mathrm{d}T}{\mathrm{d}A}$ $(\mathrm{erg} \, \mathrm{pc}^{-2})$",
                 "NumberDensity": "$n$ $(\mathrm{cm}^{-3})$",
-                "Density": "$\\rho$ $(\mathrm{g} \mathrm{cm}^{-3}$",
+                "Density": "$\\rho$ $(\mathrm{g} \mathrm{cm}^{-3})$",
                 "Temperature": "$T$ $(\mathrm{K})$",
                 "Q": "$\\mathcal{Q}$",
                 "SFDensity": "$\dot{\Sigma}_\star$ $(\\mathrm{M_\odot} \mathrm{yr}^{-1} \mathrm{pc}^{-2})$",

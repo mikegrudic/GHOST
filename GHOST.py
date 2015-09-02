@@ -36,7 +36,7 @@ from PIL import Image, ImageDraw, ImageFont
 import h5py
 import numpy as np
 from yt.visualization import color_maps
-import option_d
+#import option_d
 from scipy import spatial
 from matplotlib.colors import LogNorm
 import re
@@ -62,13 +62,13 @@ imshow = arguments["--imshow"]
 
 font = ImageFont.truetype("LiberationSans-Regular.ttf", gridres/12)
 
-if n_ngb > 1:
+if nproc > 1:
     from joblib import Parallel, delayed, cpu_count
 
 G = 4.3e4
 
-nums = np.int_([fn.split('_')[1].split('.')[0] for fn in filenames])
-filenames = np.array(filenames)[np.argsort(nums)]
+#nums = np.int_([fn.split('_')[1].split('.')[0] for fn in filenames])
+#filenames = np.array(filenames)[np.argsort(nums)]
 
 @hope.jit
 def DepositDataToGrid(data, coords, N, hsml, gridres, rmax, griddata):
@@ -401,7 +401,7 @@ def Make2DPlots(data, plane='z', show_particles=False):
                 F.save(plotname)
                 F.close()
             else:
-                if zmin > 0:
+                if zmin > 0 and np.log10(np.abs(zmax)/np.abs(zmin)) > 2 and zmin != 0 and zmax != 0:
                     plot = ax.pcolormesh(X, Y, Z, norm=LogNorm(field_limits[field][0],field_limits[field][1]), antialiased=AA, cmap=colormap)
                 else:
                     plot = ax.pcolormesh(X, Y, Z, vmin=zmin, vmax=zmax, antialiased=AA, cmap="RdBu")

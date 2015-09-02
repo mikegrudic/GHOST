@@ -54,7 +54,6 @@ n_ngb = int(arguments["--neighbors"])
 gridres = int(arguments["--gridres"])
 nproc = int(arguments["--np"])
 periodic = arguments["--periodic"]
-CoreSigma = arguments["--CoreSigma"]
 colormap = arguments["--cmap"]
 imshow = arguments["--imshow"]
 

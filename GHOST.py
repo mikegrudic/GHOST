@@ -8,7 +8,6 @@ GHOST: Gadget Hdf5 Output Slice and rayTrace
   
 Usage:
 GHOST.py <files> ... [options]
-GHOST.py <files> ... --CoreSigma [options]
 
 Options:
     -h --help         Show this screen.
@@ -22,8 +21,7 @@ Options:
     --neighbors=<N>   Number of neighbors used for smoothing length calculation [default: 32]
     --np=<N>          Number of processors to run on. [default: 1]
     --periodic        Must use for simulations in a periodic box.
-    --CoreSigma       Make a plot of central surface density vs. time
-    --imshow          Make an image without any axes
+    --imshow          Make an image without any axes instead of a matplotlib plot
 """
 
 import matplotlib as mpl

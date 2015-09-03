@@ -121,7 +121,7 @@ def DepositDataToPoint(data, coords, N, hsml, X):
 
 @hope.jit
 def DepositDataToGrid3D(data, coords, N, hsml, gridres, rmax, griddata):
-    norm =  2*2.5464790894703255 #8/np.pi for 3D
+    norm =  2.5464790894703255 #8/np.pi for 3D
     grid_dx = 2*rmax/(gridres-1)
     zSqr = coords[:,2]*coords[:,2]
     hsml_plane = np.sqrt(hsml[:]*hsml[:] - zSqr)
@@ -422,21 +422,20 @@ def MakePlot(f):
     Make2DPlots(data, plane)
 
 # Here we actually run the code
-if CoreSigma:
-    t = []
-    sigma = []
-    for f in filenames:
-        print f
-        data = SnapData(f)
-        t.append(data.time*979)
-        sigma.append(data.CentralSurfaceDensity() * 1e4)
-        print t[-1], sigma[-1]
-    plt.plot(t, sigma)
-    plt.savefig("CoreSigma")
+# if CoreSigma:
+#     t = []
+#     sigma = []
+#     for f in filenames:
+#         print f
+#         data = SnapData(f)
+#         t.append(data.time*979)
+#         sigma.append(data.CentralSurfaceDensity() * 1e4)
+#         print t[-1], sigma[-1]
+#     plt.plot(t, sigma)
+#     plt.savefig("CoreSigma")
+if nproc > 1 and len(filenames) > 1:
+    Parallel(n_jobs=nproc)(delayed(MakePlot)(f) for f in filenames)
 else:
-    if nproc > 1 and len(filenames) > 1:
-        Parallel(n_jobs=nproc)(delayed(MakePlot)(f) for f in filenames)
-    else:
-        [MakePlot(f) for f in filenames]
-    print("Done!")
+    [MakePlot(f) for f in filenames]
+print("Done!")
 

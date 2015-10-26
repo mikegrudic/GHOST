@@ -66,7 +66,6 @@ G = 4.3e4
 
 class SnapData:
     def __init__(self, name):
-        print(name)
         f = h5py.File(name, "r")
         header_toparse = f["Header"].attrs
         box_size = header_toparse["BoxSize"]
@@ -111,7 +110,6 @@ class SnapData:
         grid_dx = 2*rmax/(gridres-1)
         X, Y = X-grid_dx/2, Y-grid_dx/2
         self.X, self.Y = np.meshgrid(X,Y)
-        print self.X.shape
 
         self.r = r
         self.num = name.split("_")[1].split('.')[0]
@@ -336,18 +334,7 @@ def MakePlot(f):
     data = SnapData(f)
     Make2DPlots(data, plane)
 
-# Here we actually run the code
-# if CoreSigma:
-#     t = []
-#     sigma = []
-#     for f in filenames:
-#         print f
-#         data = SnapData(f)
-#         t.append(data.time*979)
-#         sigma.append(data.CentralSurfaceDensity() * 1e4)
-#         print t[-1], sigma[-1]
-#     plt.plot(t, sigma)
-#     plt.savefig("CoreSigma")
+
 if nproc > 1 and len(filenames) > 1:
     Parallel(n_jobs=nproc)(delayed(MakePlot)(f) for f in filenames)
 else:

@@ -14,7 +14,7 @@ Options:
     --rmax=<kpc>      Maximum radius of plot window [default: 1.0]
     --plane=<x,y,z>   Slice/projection plane [default: z]
     --c=<cx,cy,cz>    Coordinates of plot window center [default: 0.0,0.0,0.0]
-    --cmap=<name>     Name of colormap to use [default: algae]
+    --cmap=<name>     Name of colormap to use [default: cubehelix]
     --verbose         Verbose output
     --antialiasing    Using antialiasing when sampling the grid data for the actual plot. Costs some speed.
     --gridres=<N>     Resolution of slice/projection grid [default: 400]
@@ -34,14 +34,14 @@ from PIL import Image, ImageDraw, ImageFont
 import h5py
 import numpy as np
 from yt.visualization import color_maps
-#import option_d
+import option_d
 from scipy import spatial
 from matplotlib.colors import LogNorm
 import re
 import DensityHsml
 import hope
 from docopt import docopt
-hope.config.optimize = True
+from GridDeposit import *
 
 arguments = docopt(__doc__)
 filenames = arguments["<files>"]
@@ -63,97 +63,6 @@ if nproc > 1:
     from joblib import Parallel, delayed, cpu_count
 
 G = 4.3e4
-
-#nums = np.int_([fn.split('_')[1].split('.')[0] for fn in filenames])
-#filenames = np.array(filenames)[np.argsort(nums)]
-
-@hope.jit
-def DepositDataToGrid(data, coords, N, hsml, gridres, rmax, griddata):
-    norm = 1.8189136353359467 # 40 / (7 pi) for 2D
-    grid_dx = 2*rmax/(gridres-1)
-    shift_coords = coords[:] + rmax
-
-    
-    gxmin = np.int_((shift_coords[:,0] - hsml[:])/grid_dx + 0.5)
-    gxmax = np.int_((shift_coords[:,0] + hsml[:])/grid_dx)
-    gymin = np.int_((shift_coords[:,1] - hsml[:])/grid_dx + 0.5)
-    gymax = np.int_((shift_coords[:,1] + hsml[:])/grid_dx)
-    for i in xrange(N):
-        h = hsml[i]
-        mh2 = data[i,:]/h**2
-    
-        if gxmin[i] < 0:
-            gxmin[i] = 0
-        if gxmax[i] > gridres - 1:
-            gxmax[i] = gridres - 1
-        if gymin[i] < 0:
-            gymin[i] = 0
-        if gymax[i] > gridres - 1:
-            gymax[i] = gridres - 1
-
-        for gx in xrange(gxmin[i], gxmax[i]+1):
-            for gy in xrange(gymin[i], gymax[i]+1):
-                q = np.sqrt((shift_coords[i,0] - gx*grid_dx)**2 + (shift_coords[i,1] - gy*grid_dx)**2)/h
-                if q <= 0.5:
-                    griddata[gy, gx,:] += (1 - 6*q**2 + 6*q**3) * mh2
-                elif q <= 1.0:
-                    griddata[gy, gx,:] += (2*(1-q)**3) * mh2
-
-    griddata[:] = norm*griddata[:]
-
-@hope.jit
-def DepositDataToPoint(data, coords, N, hsml, X):
-    norm = 1.8189136353359467 # 40 / (7 pi) for 2D
-
-    Xdata = 0.0
-    for i in xrange(N):
-        h = hsml[i]
-        mh2 = data[i]/h**2
-        x = coords[i,0] - X[0]
-        y = coords[i,1] - X[1]
-        q = np.sqrt(x**2 + y**2)/h
-        if q <= 0.5:
-            Xdata += (1 - 6*q**2 + 6*q**3) * mh2
-        elif q <= 1.0:
-            Xdata += (2*(1-q)**3) * mh2                
-
-    return norm*Xdata
-
-@hope.jit
-def DepositDataToGrid3D(data, coords, N, hsml, gridres, rmax, griddata):
-    norm =  2.5464790894703255 #8/np.pi for 3D
-    grid_dx = 2*rmax/(gridres-1)
-    zSqr = coords[:,2]*coords[:,2]
-    hsml_plane = np.sqrt(hsml[:]*hsml[:] - zSqr)
-    shift_coords = coords[:,:2] + rmax
-    
-    gxmin = np.int_((shift_coords[:,0] - hsml_plane[:])/grid_dx + 0.5)
-    gxmax = np.int_((shift_coords[:,0] + hsml_plane[:])/grid_dx)
-    gymin = np.int_((shift_coords[:,1] - hsml_plane[:])/grid_dx + 0.5)
-    gymax = np.int_((shift_coords[:,1] + hsml_plane[:])/grid_dx)
-    
-    for i in xrange(N):
-        h = hsml[i]
-        mh3 = data[i,:]/h**3
-        z2 = zSqr[i]
-    
-        if gxmin[i] < 0:
-            gxmin[i] = 0
-        if gxmax[i] > gridres - 1:
-            gxmax[i] = gridres - 1
-        if gymin[i] < 0:
-            gymin[i] = 0
-        if gymax[i] > gridres - 1:
-            gymax[i] = gridres - 1
-        for gx in xrange(gxmin[i], gxmax[i]+1):
-            for gy in xrange(gymin[i], gymax[i]+1):
-                q = np.sqrt((shift_coords[i,0] - gx*grid_dx)**2 + (shift_coords[i,1] - gy*grid_dx)**2 + z2)/h
-                if q <= 0.5:
-                    griddata[gy, gx,:] += (1 - 6*q**2 + 6*q**3) * mh3
-                elif q <= 1.0:
-                    griddata[gy, gx,:] += (2*(1-q)**3) * mh3
-
-    griddata[:] = norm*griddata[:]
 
 class SnapData:
     def __init__(self, name):
@@ -186,9 +95,14 @@ class SnapData:
             r[i] = r[i][filter]
 
             self.field_data[i]["Coordinates"] = X[filter]
+            if not "Masses" in ptype.keys():
+                self.field_data[i]["Masses"] = f["Header"].attrs["MassTable"][i] * np.ones_like(self.field_data[i]["Coordinates"][:,0])
             if not "SmoothingLength" in ptype.keys():
-                if verbose: print("Computing smoothing length for %s..." % pname.lower())
-                self.field_data[i]["SmoothingLength"] = DensityHsml.GetHsml(self.field_data[i]["Coordinates"])
+                if "AGS-Softening" in ptype.keys():
+                    self.field_data[i]["SmoothingLength"] = np.array(ptype["AGS-Softening"])
+                else:
+                    if verbose: print("Computing smoothing length for %s..." % pname.lower())
+                    self.field_data[i]["SmoothingLength"] = DensityHsml.GetHsml(self.field_data[i]["Coordinates"])
         f.close()
 
         if verbose: print("Reticulating splines...")        
@@ -197,6 +111,7 @@ class SnapData:
         grid_dx = 2*rmax/(gridres-1)
         X, Y = X-grid_dx/2, Y-grid_dx/2
         self.X, self.Y = np.meshgrid(X,Y)
+        print self.X.shape
 
         self.r = r
         self.num = name.split("_")[1].split('.')[0]
@@ -213,7 +128,7 @@ class SnapData:
             vx, vy, vz = vel.T
             vel = {"x": np.c_[vy,vz,vx], "y": np.c_[vx,vz,vy]}[plane]
 
-        filter = np.max(np.abs(coords[:,:2]),1) <= 1.1*rmax
+        filter = 0*np.max(np.abs(coords[:,:2]),1) <= 1.1*rmax
         coords, vel = coords[filter], vel[filter]
         hsml = self.field_data[ptype]["SmoothingLength"][filter]
         masses = self.field_data[ptype]["Masses"][filter]
@@ -321,9 +236,9 @@ class SnapData:
             field_data.append(masses * np.sum(self.field_data[ptype]["MagneticField"][filter]**2, axis=1)**0.5)
             data_index["B"] = i
             i += 1
-#        if ptype==0 and "Density" in fields_toplot[ptype] or "NumberDensity" in fields_toplot[ptype] or "JeansMass" in fields_toplot[ptype]:
-#            field_data.append(masses*self.field_data[ptype]["Density"][filter])
-
+        if ptype==0 and "Density" in fields_toplot[ptype] or "NumberDensity" in fields_toplot[ptype] or "JeansMass" in fields_toplot[ptype]:
+            field_data.append(masses*self.field_data[ptype]["Density"][filter])
+            
         if verbose: print("Summing slice kernels for type %d..."%ptype)
         griddata = np.zeros((gridres, gridres, len(field_data)))
 
@@ -333,8 +248,8 @@ class SnapData:
 
         #regorganize this into an iteration over the keys of data_index
         if "Density" in fields_toplot[ptype] or "NumberDensity" in fields_toplot[ptype] or "JeansMass" in fields_toplot[ptype]:
-            outdict["Density"] = griddata[:,:,0] * 6.768e-22
-            outdict["NumberDensity"] = outdict["Density"] * 5.97e23
+            outdict["Density"] = griddata[:,:,-1]/griddata[:,:,0]# * 6.768e-22
+            outdict["NumberDensity"] = outdict["Density"] * 404
         if "Temperature" in fields_toplot[ptype]:
             outdict["Temperature"] = griddata[:,:,1]/griddata[:,:,0]
             outdict["Temperature"][griddata[:,:,1]==0] = np.nan
@@ -387,7 +302,6 @@ def Make2DPlots(data, plane='z', show_particles=False):
                         Z[Z==0] = Z[Z>0].min()
                     
                 if zmin > 0:
-                    print Z.min()
                     mpl.image.imsave(plotname, np.log10(np.abs(Z)), cmap=colormap, vmin=np.log10(field_limits[field][0]), vmax=np.log10(field_limits[field][1]))
                 else:
                     mpl.image.imsave(plotname, Z, cmap="RdBu", vmin=field_limits[field][0], vmax=field_limits[field][1])
@@ -399,14 +313,15 @@ def Make2DPlots(data, plane='z', show_particles=False):
                 F.close()
             else:
                 if zmin > 0 and np.log10(np.abs(zmax)/np.abs(zmin)) > 2 and zmin != 0 and zmax != 0:
+                    print X.shape, Y.shape, Z.shape
                     plot = ax.pcolormesh(X, Y, Z, norm=LogNorm(field_limits[field][0],field_limits[field][1]), antialiased=AA, cmap=colormap)
                 else:
                     plot = ax.pcolormesh(X, Y, Z, vmin=zmin, vmax=zmax, antialiased=AA, cmap="RdBu")
                 bar = plt.colorbar(plot, pad=0.0)
                 bar.set_label(zlabel)
                 if show_particles:
-                    X = data.field_data[type]["Coordinates"]
-                    ax.scatter(X[:,0], X[:,1], s=1)
+                    coords = data.field_data[type]["Coordinates"]
+                    ax.scatter(coords[:,0], coords[:,1], s=1)
                 ax.set_xlim([-rmax,rmax])
                 ax.set_ylim([-rmax,rmax])
                 ax.set_xlabel("$x$ $(\mathrm{kpc})$")

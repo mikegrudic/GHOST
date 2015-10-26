@@ -17,9 +17,8 @@ def GetHsml(coords, des_ngb=32):
 def GetHsmlWork(neighbors, neighbor_dists, hsml, des_ngb, N):
     n_ngb = 0.0
     for i in xrange(N):
-
-        upper = neighbor_dists[i,des_ngb-1]/0.63
-        lower = neighbor_dists[i, 2]
+        upper = neighbor_dists[i,des_ngb-1]/0.6
+        lower = neighbor_dists[i,1]
         error = 1e100
         count = 0
         while error > 1:
@@ -38,6 +37,6 @@ def GetHsmlWork(neighbors, neighbor_dists, hsml, des_ngb, N):
                 upper = h
             else:
                 lower = h
-            error = np.fabs(n_ngb-des_ngb)/des_ngb
+            error = np.fabs(n_ngb-des_ngb)
             
         hsml[i] = h

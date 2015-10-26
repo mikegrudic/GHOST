@@ -3,29 +3,29 @@ proj_fields = "SurfaceDensity", "SigmaV", "KineticEnergy", "Q", "SFDensity", "Ma
 slice_fields = "Density", "NumberDensity", "Temperature", "MagEnergyDensity", "JeansMass", "B_z", "B_x", "B_y", "B"
 
 # Fields to actually plot
-fields_toplot = {0: ["SurfaceDensity", "Density"],
+fields_toplot = {0: ["SurfaceDensity"],
                  1: [],
-                 2: [],
-                 3: [],
+                 2: ["SurfaceDensity"],
+                 3: ["SurfaceDensity"],
                  4: ["SurfaceDensity"],
                  5: []
                  }
 
 # Colormap limits for each field
-field_limits = {"SurfaceDensity": [1, 1e6],
+field_limits = {"SurfaceDensity": [1, 1e4],
                 "B_z": [1e-5, 1e-2],
                 "B_x": [1e-5, 1e-2],
                 "B_y":[1e-5, 1e-2],
                 "B": [1e-5, 10],
                 "Temperature": [10, 1e7],
                 "SigmaV": [1e-1, 1e4],
-                "Density":[1e-22,5e-21],
-                "NumberDensity":[1e2, 2e3],
+                "Density":[1e2,1e8],
+                "NumberDensity":[1, 1e5],
                 "KineticEnergy": [1e40, 1e60],
                 "Q": [1e-1,1e3],
                 "SFDensity" : [1e-8, 10],
                 "MagEnergySurfaceDensity": [1e46, 1e60],
-                "JeansMass": [1, 1e6]}
+                "JeansMass": [1e-6, 1e3]}
 
 #Plot labels for fields. Can contain TeX syntax
 field_labels = {"SurfaceDensity": "$\\Sigma$ $(\mathrm{M_\odot}/\mathrm{pc}^2)$",

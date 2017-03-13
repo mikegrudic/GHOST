@@ -7,7 +7,7 @@ GHOST: Gadget Hdf5 Output Slice and rayTrace
   |/
   
 Usage:
-GHOST.py <files> ... [options]
+    GHOST.py [<files>]... [options]
 
 Options:
     -h --help         Show this screen.
@@ -27,14 +27,11 @@ Options:
 import matplotlib as mpl
 from PlotSettings import *
 mpl.use('Agg')
-#mpl.rcParams['font.size']=12
 import matplotlib.pyplot as plt
 from PIL import Image, ImageDraw, ImageFont
-#from SnapData import *
 import h5py
 import numpy as np
 from yt.visualization import color_maps
-import option_d
 from scipy import spatial
 from matplotlib.colors import LogNorm
 import re
@@ -42,9 +39,12 @@ import DensityHsml
 import hope
 from docopt import docopt
 from GridDeposit import *
+import glob
 
 arguments = docopt(__doc__)
 filenames = arguments["<files>"]
+if not filenames:
+    filenames=glob.glob('snapshot_*.hdf5')
 rmax = float(arguments["--rmax"])
 plane = arguments["--plane"]
 center = np.array([float(c) for c in re.split(',', arguments["--c"])])
@@ -56,13 +56,7 @@ nproc = int(arguments["--np"])
 periodic = arguments["--periodic"]
 colormap = arguments["--cmap"]
 imshow = arguments["--imshow"]
-
 font = ImageFont.truetype("LiberationSans-Regular.ttf", gridres/12)
-
-if nproc > 1:
-    from joblib import Parallel, delayed, cpu_count
-
-G = 4.3e4
 
 class SnapData:
     def __init__(self, name):
@@ -334,10 +328,18 @@ def MakePlot(f):
     data = SnapData(f)
     Make2DPlots(data, plane)
 
+def main():
+    if nproc > 1:
+        from joblib import Parallel, delayed, cpu_count
+    G = 4.3e4
 
-if nproc > 1 and len(filenames) > 1:
-    Parallel(n_jobs=nproc)(delayed(MakePlot)(f) for f in filenames)
-else:
-    [MakePlot(f) for f in filenames]
-print("Done!")
+    if nproc > 1 and len(filenames) > 1:
+        Parallel(n_jobs=nproc)(delayed(MakePlot)(f) for f in filenames)
+    else:
+        [MakePlot(f) for f in filenames]
+    print("Done!")
+
+
+if __name__ == '__main__':
+    main()
 

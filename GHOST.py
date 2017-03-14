@@ -57,6 +57,7 @@ periodic = arguments["--periodic"]
 colormap = arguments["--cmap"]
 imshow = arguments["--imshow"]
 font = ImageFont.truetype("LiberationSans-Regular.ttf", gridres/12)
+G = 4.3e4
 
 class SnapData:
     def __init__(self, name):
@@ -331,7 +332,6 @@ def MakePlot(f):
 def main():
     if nproc > 1:
         from joblib import Parallel, delayed, cpu_count
-    G = 4.3e4
 
     if nproc > 1 and len(filenames) > 1:
         Parallel(n_jobs=nproc)(delayed(MakePlot)(f) for f in filenames)

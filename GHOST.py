@@ -28,7 +28,9 @@ Options:
     --uv=<Nx>         If specified, will print this information on the plot                          
     --cooling=<N>     If specified, will print this information on the plot
     --time=<T>        If sepcified, with only analyze files within a short bit of this timestep 
+    --phase           Do a temperature vs density phase diagram instead of plot
     --stars           Count stars instead of plot
+    --accrete         If enabled the stars can accrete and so are black hole particles
 """
 
 import matplotlib as mpl
@@ -38,6 +40,7 @@ import matplotlib.pyplot as plt
 from PIL import Image, ImageDraw, ImageFont
 import h5py
 import numpy as np
+from numpy import genfromtxt
 from yt.visualization import color_maps
 from scipy import spatial
 from matplotlib.colors import LogNorm
@@ -71,6 +74,8 @@ mingastemp = arguments["--mingastemp"]
 cooling = arguments["--cooling"]
 target_time = arguments["--time"]
 analyze_stars = arguments["--stars"]
+analyze_phase = arguments["--phase"]
+accrete = arguments["--accrete"]
 font = ImageFont.truetype("LiberationSans-Regular.ttf", gridres/12)
 G = 4.3e4
 
@@ -89,8 +94,7 @@ class SnapData:
         for i, n in enumerate(particle_counts):
             if n==0: continue
             if len(fields_toplot[i]) == 0 : continue
-            if i==5: continue
-
+            if i==5 and not accrete: continue
             pname = {0:"Gas", 1:"DM", 2:"Disk", 3:"Bulge", 5:"BH", 4:"Stars"}[i]
             
             ptype = f["PartType%d" % i]
@@ -100,10 +104,9 @@ class SnapData:
             myfilter = np.max(np.abs(X), axis=1) <= 1e100
             
             for key in ptype.keys():
-                if key == "Temperature":
-                    print "Warning, this was crashing so I am skipping the Temperature key!"
-                    continue
-
+                #if key == "Temperature":
+                #    print "Warning, this was crashing so I am skipping the Temperature key!"
+                #    continue
                 self.field_data[i][key] = np.array(ptype[key])[myfilter]
 
             r[i] = r[i][myfilter]
@@ -111,6 +114,26 @@ class SnapData:
             self.field_data[i]["Coordinates"] = X[myfilter]
             if not "Masses" in ptype.keys():
                 self.field_data[i]["Masses"] = f["Header"].attrs["MassTable"][i] * np.ones_like(self.field_data[i]["Coordinates"][:,0])
+            if "Temperature" in fields_toplot[i]:
+
+                """
+                Temperature = mean_molecular_weight * (gamma-1) * InternalEnergy / k_Boltzmann  
+                #k_Boltzmann is the Boltzmann constant  
+                gamma = 5/3 (adiabatic index)  
+                mean_molecular_weight = mu*proton_mass (definition)  
+                mu = (1 + 4*y_helium) / (1+y_helium+ElectronAbundance)  (ignoring small corrections from the metals)  
+                ElectronAbundance defined below (saved in snapshot)  
+                y_helium = helium_mass_fraction / (4*(1-helium_mass_fraction))  
+                helium_mass_fraction is the mass fraction of helium (metallicity element n=1 described below)
+                """
+                gamma = 5.0/3.0
+                x_H = 0.76
+                if 'ElectronAbundance' in self.field_data[i].keys():
+                    a_e = self.field_data[i]['ElectronAbundance'][myfilter]
+                else:
+                    a_e = 0.0
+                mu = 4.0 / (3.0 * x_H + 1.0 + 4.0 * x_H * a_e)
+                self.field_data[i]['Temperature']=self.field_data[i]["Masses"][myfilter]*self.field_data[i]["InternalEnergy"][myfilter]*1e10*mu*(gamma-1)*1.211e-8
             if not "SmoothingLength" in ptype.keys():
                 if "AGS-Softening" in ptype.keys():
                     self.field_data[i]["SmoothingLength"] = np.array(ptype["AGS-Softening"])
@@ -378,51 +401,182 @@ def MakePlot(f):
     # This section I added so that the plots can be annotated with more relevent info
     Make2DPlots(data, plane)
 
-def GetInfoFromDir():
+def GetInfoFromDir(as_list=False):
     mydir=os.getcwd()
-    metallicity=re.findall('Metallicity(\d+\.\d+)',mydir)
+    if 'full1' in mydir or 'part1' in mydir:
+        return mydir
+    metallicity=re.findall('Metallicity(-?\d*\.?\d+([eE][-+]?\d+)?)',mydir)
+    if metallicity:
+        metallicity=metallicity[0]
     cooling=re.findall("Grack_(\d)",mydir)
     resolution=re.findall("Res(\d+)",mydir)
     mingas=re.findall("MinGasTemp(\d+)",mydir)
     sfeff=re.findall("SfEff(\d+\.\d+)",mydir)
-    outinfo=[]
-    if metallicity:
-        outinfo+=['Z=%s'%metallicity[0]]
-    if cooling:
-        outinfo+=['grack=%s'%cooling[0]]
-    if resolution:
-        outinfo+=['res=%s'%resolution[0]]        
-    if mingas:
-        outinfo+=['mingas=%s'%mingas[0]]
-    if sfeff:
-        outinfo+=['sfeff=%s'% sfeff[0]]
-    return ', '.join(outinfo)
-def AnalyzeStars(f):
+    uv=re.findall("UV(\d+)x",mydir)
+    ssf=re.findall("SSF(\d+_.*)/",mydir)
+    if as_list:
+        if not metallicity:
+            print "warning setting metallicity to default 0.1"
+            metallicity=[0.1]
+        if not cooling:
+            cooling=["normal"]
+        else:
+            cooling=['grack='+cooling[0]]
+        if not mingas:
+            mingas=[10]
+        if not sfeff:
+            sfeff=[1]
+        if resolution[0]=='23':
+            resolution=['low']
+        elif resolution[0]=='50':
+            resolution=['high']
+        if not uv:
+            uv=['0']
+        if not ssf:
+            ssf=['not_used']
+        return [metallicity[0],cooling[0],resolution[0],mingas[0],sfeff[0],uv[0],ssf[0]]
+    else:
+        outinfo=[]
+        if metallicity:
+            outinfo+=['Z%s'%metallicity[0]]
+        if cooling:
+            outinfo+=['grack%s'%cooling[0]]
+        if resolution:
+            outinfo+=['res%s'%resolution[0]]        
+        if mingas:
+            outinfo+=['mingas=%s'%mingas[0]]
+        if sfeff:
+            outinfo+=['sfeff%s'% sfeff[0]]
+        if uv:
+            outinfo+=['uv%s'%uv[0]]
+        if ssf:
+            outinfo+=['ssf%s'%ssf[0]]
+        return ', '.join(outinfo)
+
+def convert_mass(m):
+    unit_mass_in_solarmass_per_h=1.0e10
+    return unit_mass_in_solarmass_per_h*m 
+
+
+def AnalyzePhase(f,as_list=True):
     data = SnapData(f)
+    if data.time==0.0:
+        return
     if target_time:
         if not np.isclose(data.time,float(target_time)):
             return
-    # things we can analyze (keys):
-    #'AGS-Softening','Coordinates','Masses','Metallicity','ParticleChildIDsNumber','ParticleIDGenerationNumber','ParticleIDs','Potential','StellarFormationTime','Velocities'
-    # How to access them: data.field_data[4][key]
-    print "I found", len(data.field_data[4]["ParticleIDs"]),"stars","at t=%.3f"%data.time,"for params",GetInfoFromDir()
+    gas_idx = 0
+    if (accrete or GetInfoFromDir(f)[-1]!='not_used') and data.field_data[5]:
+        stars_idx = 5
+    else:
+        stars_idx =4
 
 
+    plt.clf()
+    gamma = 5.0/3.0
+    x_H = 0.76
+    a_e = 0.0
+    mu = 4.0 / (3.0 * x_H + 1.0 + 4.0 * x_H * a_e)
+    temp=data.field_data[gas_idx]["InternalEnergy"]*1e10*mu*(gamma-1)*1.211e-8
+
+    n, bins, patches = plt.hist(temp, 50, facecolor='green', alpha=0.75) #normed=1 gives probability
+    plt.xlabel("Temperature [Kelvin]")
+    plt.ylabel("$N_{gas}$")
+    plt.xscale("log")
+    plt.xlim([10**2,10**7])
+#    plt.yscale("log")
+    info=GetInfoFromDir(as_list=True) 
+    z=info[0]
+    plt.title(GetPlotTitle(data.time)+ ' $Z/Z_\odot=%s$'%z)
+    #l = plt.plot(bins, y, 'r--', linewidth=1)
+    plt.savefig("%s-%f_gastemphist.png"%(GetInfoFromDir(),data.time),dpi=400)
+
+    info+=[np.average(data.field_data[gas_idx]["Masses"]*temp)]
+    print 'MassWeight,',','.join(map(str,info))
+
+    #print "GAS SFE",data.time
+    #print "ave",np.average(data.field_data[gas_idx]["StarFormationRate"])
+    #print "min",np.min(data.field_data[gas_idx]["StarFormationRate"])
+    #print "max",np.max(data.field_data[gas_idx]["StarFormationRate"])
+
+
+    plt.plot(temp,data.field_data[gas_idx]["Density"],'ro')
+    plt.xlabel("InternalEnergy [Kelvin]") # particle internal energy (specific energy per unit mass in code units). units are physical
+    plt.ylabel("Density [units ?]")# Density (P['rho']): [N]-element array, code-calculated gas density, at the coordinate position of the particle 
+
+    # plt.yscale('log')
+    # plt.xscale('log')
+    plt.title(GetPlotTitle(data.time))
+
+    #l = plt.plot(bins, y, 'r--', linewidth=1)
+    plt.savefig("%s-%f_temp_dens.png"%(GetInfoFromDir(),data.time),dpi=400)
+
+
+def AnalyzeStars(f,as_list=True):
+    data = SnapData(f)
+    try:
+	hopf=open(f.replace("snapshot","bound").replace("hdf5","dat"))
+	hopf=genfromtxt(hopf)
+        try:
+            biggest_hop_mass=hopf[0][0]
+        except:
+            biggest_hop_mass=hopf[0]
+    except:
+	biggest_hop_mass="unknown"
+    if data.time==0.0:
+        return
+    if target_time:
+        if not np.isclose(data.time,float(target_time)):
+            return
+    if (accrete or GetInfoFromDir(f)[-1]!='not_used') and data.field_data[5]:
+        stars_idx = 5
+    else:
+        stars_idx =4
+    if not as_list:
+        #len(data.field_data[stars_idx]["ParticleIDs"]),"stars","at t=%.3f"%data.time,"for params",GetInfoFromDir()+","," average mass [msol/h]=",np.average(data.field_data[stars_idx]["Masses"]),"max mass=",np.max(data.field_data[stars_idx]["Masses"])
+        print "I found", len(data.field_data[stars_idx]["ParticleIDs"]),"stars","at t=%.3f"%data.time,"for params",GetInfoFromDir()+","," average mass [msol/h]=",np.average(data.field_data[stars_idx]["Masses"]),"max mass=",np.max(data.field_data[stars_idx]["Masses"])
+    else:
+        print  ','.join(map(str,
+                            [len(data.field_data[stars_idx]["ParticleIDs"]),
+                            "%.4f"%data.time]+
+                            GetInfoFromDir(as_list=True)+
+                            [np.average(data.field_data[stars_idx]["Masses"]),
+                                np.max(data.field_data[stars_idx]["Masses"]),
+                                np.sum(data.field_data[stars_idx]["Masses"]),
+                                np.sum(data.field_data[0]["Masses"]),
+				biggest_hop_mass]))
+        #print convert_mass(np.sum(data.field_data[stars_idx]["Masses"])+ np.sum(data.field_data[0]["Masses"]))
+
+    if accrete:
+        # here we are going to histogram
+
+        plt.clf()
+
+        n, bins, patches = plt.hist(convert_mass(data.field_data[stars_idx]["Masses"]), 50, facecolor='green', alpha=0.75) #normed=1 gives probability
+        plt.xlabel("Mass [$M_\odot/h$]")
+        plt.ylabel("$N_{stars}$")
+        plt.yscale("log")
+        plt.title(GetPlotTitle(data.time))
+        #l = plt.plot(bins, y, 'r--', linewidth=1)
+        plt.savefig("%s-%f_starhist.png"%(GetInfoFromDir(),data.time),dpi=400)
     
 def main():
     if nproc > 1:
         from joblib import Parallel, delayed, cpu_count
 
-    if not analyze_stars:
-        function = MakePlot
-    else:
+    if analyze_stars:
         function = AnalyzeStars
+    elif analyze_phase:
+        function = AnalyzePhase
+    else:
+        function = MakePlot
 
     if nproc > 1 and len(filenames) > 1:
         Parallel(n_jobs=nproc)(delayed(function)(f) for f in filenames)
     else:
         [function(f) for f in filenames]
-    print("Done!")
+    if not analyze_stars:
+        print("Done!")
 
 
 if __name__ == '__main__':

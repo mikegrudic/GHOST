@@ -45,3 +45,13 @@ Some caveats:
 	Unit mass: 1e10 solar mass
 	Unit speed: 1km/s
 - When smoothing lengths must be calculated, we simply take the distance to the n_ngb'th nearest neighbor.
+
+Installing depedencies:
+mkdir ~/src
+cd src
+wget http://bitbucket.org/yt_analysis/yt/raw/yt/doc/install_script.sh
+bash install_script.sh
+export PATH=~/src/yt-conda/bin:$PATH
+pip install hope pillow joblib scipy
+
+note to add: export PATH=~/src/yt-conda/bin:$PATH to .bash_profile or other

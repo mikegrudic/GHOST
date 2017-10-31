@@ -7,7 +7,7 @@ GHOST: Gadget Hdf5 Output Slice and rayTrace
   |/
   
 Usage:
-GHOST.py <files> ... [options]
+    GHOST.py [<files>]... [options]
 
 Options:
     -h --help         Show this screen.
@@ -22,29 +22,40 @@ Options:
     --np=<N>          Number of processors to run on. [default: 1]
     --periodic        Must use for simulations in a periodic box.
     --imshow          Make an image without any axes instead of a matplotlib plot
+    --metallicity=<Z> If specified, will print this information on the plot             
+    --sfeff=<sf>      If specified, will print this information on the plot             
+    --mingastemp=<gt> If specified, will print this information on the plot
+    --uv=<Nx>         If specified, will print this information on the plot                          
+    --cooling=<N>     If specified, will print this information on the plot
+    --time=<T>        If sepcified, with only analyze files within a short bit of this timestep 
+    --phase           Do a temperature vs density phase diagram instead of plot
+    --stars           Count stars instead of plot
+    --accrete         If enabled the stars can accrete and so are black hole particles
 """
 
 import matplotlib as mpl
 from PlotSettings import *
 mpl.use('Agg')
-#mpl.rcParams['font.size']=12
 import matplotlib.pyplot as plt
 from PIL import Image, ImageDraw, ImageFont
-#from SnapData import *
 import h5py
 import numpy as np
+from numpy import genfromtxt
 from yt.visualization import color_maps
-import option_d
 from scipy import spatial
 from matplotlib.colors import LogNorm
 import re
+import os
 import DensityHsml
 import hope
 from docopt import docopt
 from GridDeposit import *
+import glob
 
 arguments = docopt(__doc__)
 filenames = arguments["<files>"]
+if not filenames:
+    filenames=glob.glob('snapshot_*.hdf5')
 rmax = float(arguments["--rmax"])
 plane = arguments["--plane"]
 center = np.array([float(c) for c in re.split(',', arguments["--c"])])
@@ -56,12 +67,16 @@ nproc = int(arguments["--np"])
 periodic = arguments["--periodic"]
 colormap = arguments["--cmap"]
 imshow = arguments["--imshow"]
-
+metallicity = arguments["--metallicity"]
+sfeff = arguments["--sfeff"]
+uv = arguments["--uv"]
+mingastemp = arguments["--mingastemp"]
+cooling = arguments["--cooling"]
+target_time = arguments["--time"]
+analyze_stars = arguments["--stars"]
+analyze_phase = arguments["--phase"]
+accrete = arguments["--accrete"]
 font = ImageFont.truetype("LiberationSans-Regular.ttf", gridres/12)
-
-if nproc > 1:
-    from joblib import Parallel, delayed, cpu_count
-
 G = 4.3e4
 
 class SnapData:
@@ -70,7 +85,7 @@ class SnapData:
         header_toparse = f["Header"].attrs
         box_size = header_toparse["BoxSize"]
         self.time = header_toparse["Time"]
-        
+
         particle_counts = header_toparse["NumPart_ThisFile"]
         
         self.field_data = [{}, {}, {}, {}, {}, {}]
@@ -79,23 +94,46 @@ class SnapData:
         for i, n in enumerate(particle_counts):
             if n==0: continue
             if len(fields_toplot[i]) == 0 : continue
-            if i==5: continue
-
+            if i==5 and not accrete: continue
             pname = {0:"Gas", 1:"DM", 2:"Disk", 3:"Bulge", 5:"BH", 4:"Stars"}[i]
             
             ptype = f["PartType%d" % i]
             X = np.array(ptype["Coordinates"]) - center
             if periodic: X = (X + box_size/2)%box_size - box_size/2
             r[i] = np.sqrt(np.sum(X[:,:2]**2, axis=1))
-            filter = np.max(np.abs(X), axis=1) <= 1e100
+            myfilter = np.max(np.abs(X), axis=1) <= 1e100
             
             for key in ptype.keys():
-                self.field_data[i][key] = np.array(ptype[key])[filter]
-            r[i] = r[i][filter]
+                #if key == "Temperature":
+                #    print "Warning, this was crashing so I am skipping the Temperature key!"
+                #    continue
+                self.field_data[i][key] = np.array(ptype[key])[myfilter]
 
-            self.field_data[i]["Coordinates"] = X[filter]
+            r[i] = r[i][myfilter]
+
+            self.field_data[i]["Coordinates"] = X[myfilter]
             if not "Masses" in ptype.keys():
                 self.field_data[i]["Masses"] = f["Header"].attrs["MassTable"][i] * np.ones_like(self.field_data[i]["Coordinates"][:,0])
+            if "Temperature" in fields_toplot[i]:
+
+                """
+                Temperature = mean_molecular_weight * (gamma-1) * InternalEnergy / k_Boltzmann  
+                #k_Boltzmann is the Boltzmann constant  
+                gamma = 5/3 (adiabatic index)  
+                mean_molecular_weight = mu*proton_mass (definition)  
+                mu = (1 + 4*y_helium) / (1+y_helium+ElectronAbundance)  (ignoring small corrections from the metals)  
+                ElectronAbundance defined below (saved in snapshot)  
+                y_helium = helium_mass_fraction / (4*(1-helium_mass_fraction))  
+                helium_mass_fraction is the mass fraction of helium (metallicity element n=1 described below)
+                """
+                gamma = 5.0/3.0
+                x_H = 0.76
+                if 'ElectronAbundance' in self.field_data[i].keys():
+                    a_e = self.field_data[i]['ElectronAbundance'][myfilter]
+                else:
+                    a_e = 0.0
+                mu = 4.0 / (3.0 * x_H + 1.0 + 4.0 * x_H * a_e)
+                self.field_data[i]['Temperature']=self.field_data[i]["Masses"][myfilter]*self.field_data[i]["InternalEnergy"][myfilter]*1e10*mu*(gamma-1)*1.211e-8
             if not "SmoothingLength" in ptype.keys():
                 if "AGS-Softening" in ptype.keys():
                     self.field_data[i]["SmoothingLength"] = np.array(ptype["AGS-Softening"])
@@ -126,10 +164,10 @@ class SnapData:
             vx, vy, vz = vel.T
             vel = {"x": np.c_[vy,vz,vx], "y": np.c_[vx,vz,vy]}[plane]
 
-        filter = 0*np.max(np.abs(coords[:,:2]),1) <= 1.1*rmax
-        coords, vel = coords[filter], vel[filter]
-        hsml = self.field_data[ptype]["SmoothingLength"][filter]
-        masses = self.field_data[ptype]["Masses"][filter]
+        myfilter = 0*np.max(np.abs(coords[:,:2]),1) <= 1.1*rmax
+        coords, vel = coords[myfilter], vel[myfilter]
+        hsml = self.field_data[ptype]["SmoothingLength"][myfilter]
+        masses = self.field_data[ptype]["Masses"][myfilter]
 
         grid_dx = 2*rmax/(gridres-1)
         #floor smoothing length at the Nyquist wavelength to avoid aliasing
@@ -147,17 +185,17 @@ class SnapData:
             i+=1
         if ptype==0:
             if "Q" in  fields_toplot[ptype]:
-                omega = np.abs((vel[:,0] * coords[:,1] - vel[:,1] * coords[:,0])/self.r[ptype][filter]**2)
+                omega = np.abs((vel[:,0] * coords[:,1] - vel[:,1] * coords[:,0])/self.r[ptype][myfilter]**2)
                 field_data.append(masses*omega)
                 data_index["Q"] = i
                 i+=1
             if "SFDensity" in fields_toplot[ptype]:
-                sfr = self.field_data[0]["StarFormationRate"][filter]
+                sfr = self.field_data[0]["StarFormationRate"][myfilter]
                 field_data.append(sfr)
                 data_index["SFDensity"] = i
                 i += 1
             if "MagEnergySurfaceDensity" in fields_toplot[ptype]:
-                B = self.field_data[0]["MagneticField"][filter]
+                B = self.field_data[0]["MagneticField"][myfilter]
                 sigmaB = np.sum(B**2/2, axis=1) * 2.938e55
                 field_data.append(sigmaB)
                 data_index["MagEnergySurfaceDensity"] = i
@@ -205,8 +243,8 @@ class SnapData:
 
 #        hsml = 2*hsml
         #floor hsml at the Nyquist wavelength to avoid aliasing
-        filter = np.abs(coords[:,2]) < hsml
-        coords, masses, hsml = coords[filter], masses[filter], hsml[filter]
+        myfilter = np.abs(coords[:,2]) < hsml
+        coords, masses, hsml = coords[myfilter], masses[myfilter], hsml[myfilter]
 
         hsml_plane = np.sqrt(hsml**2 - coords[:,2]**2)
         hsml[hsml_plane < grid_dx] = np.sqrt(grid_dx**2 + coords[:,2][hsml_plane < grid_dx]**2)
@@ -218,24 +256,24 @@ class SnapData:
             gamma = 5.0/3.0
             x_H = 0.76
             if 'ElectronAbundance' in self.field_data[ptype].keys():
-                a_e = self.field_data[ptype]['ElectronAbundance'][filter]
+                a_e = self.field_data[ptype]['ElectronAbundance'][myfilter]
             else:
                 a_e = 0.0
             mu = 4.0 / (3.0 * x_H + 1.0 + 4.0 * x_H * a_e)
-            field_data.append(masses*self.field_data[ptype]["InternalEnergy"][filter]*1e10*mu*(gamma-1)*1.211e-8)
+            field_data.append(masses*self.field_data[ptype]["InternalEnergy"][myfilter]*1e10*mu*(gamma-1)*1.211e-8)
             data_index["Temperature"] = i
             i+=1
         for B in "B_x","B_y","B_z":
             if B in fields_toplot[ptype]:
-                field_data.append(masses * self.field_data[ptype]["MagneticField"][:,{"B_x":0, "B_y": 1, "B_z":2}[B]][filter])
+                field_data.append(masses * self.field_data[ptype]["MagneticField"][:,{"B_x":0, "B_y": 1, "B_z":2}[B]][myfilter])
                 data_index[B] = i
                 i += 1
         if "B" in fields_toplot[ptype]:
-            field_data.append(masses * np.sum(self.field_data[ptype]["MagneticField"][filter]**2, axis=1)**0.5)
+            field_data.append(masses * np.sum(self.field_data[ptype]["MagneticField"][myfilter]**2, axis=1)**0.5)
             data_index["B"] = i
             i += 1
         if ptype==0 and "Density" in fields_toplot[ptype] or "NumberDensity" in fields_toplot[ptype] or "JeansMass" in fields_toplot[ptype]:
-            field_data.append(masses*self.field_data[ptype]["Density"][filter])
+            field_data.append(masses*self.field_data[ptype]["Density"][myfilter])
             
         if verbose: print("Summing slice kernels for type %d..."%ptype)
         griddata = np.zeros((gridres, gridres, len(field_data)))
@@ -269,7 +307,35 @@ class SnapData:
                 sigma += s0
         return sigma
 
+def GetPlotTitle(t):
+    extra_info=''
+
+    if metallicity:
+        extra_info += ', $Z_{\odot}=%s$' % metallicity
+    if sfeff:
+        extra_info += ', $SfEffPerFreeFall=%s$' % sfeff
+    if mingastemp:
+        extra_info += ', $MinGasTemp=%s$' % mingastemp
+    if uv:
+        extra_info += ', $UV=%s$' % uv
+    if cooling:
+        cooling_type = ''
+        if cooling == '0':
+            cooling_type='Tabular'
+        elif cooling == '1':
+            cooling_type = 'Atomic'
+        elif cooling == '2':
+            cooling_type = 'Atomic+H2+H2I+H2II'
+        elif cooling == '3':
+            cooling_type = 'Atomic+H2+H2I+H2II+DI+DII+HD'
+        extra_info += ' %s'%cooling_type
+    return "$t = %g\\mathrm{Myr}$%s"%(t*979,extra_info)
+
 def Make2DPlots(data, plane='z', show_particles=False):
+    if target_time:
+        if not np.isclose(data.time,float(target_time)):
+            return
+    plot_title=GetPlotTitle(data.time)
     X, Y = data.X, data.Y
     for type in fields_toplot:
         if sum([f in proj_fields for f in fields_toplot[type]]):
@@ -324,7 +390,7 @@ def Make2DPlots(data, plane='z', show_particles=False):
                 ax.set_ylim([-rmax,rmax])
                 ax.set_xlabel("$x$ $(\mathrm{kpc})$")
                 ax.set_ylabel("$y$ $(\mathrm{kpc})$")
-                plt.title("$t = %g\\mathrm{Myr}$"%(data.time*979))
+                plt.title(plot_title)
                 plt.savefig(plotname, bbox_inches='tight')
             plt.close(fig)
             plt.clf()
@@ -332,12 +398,187 @@ def Make2DPlots(data, plane='z', show_particles=False):
 
 def MakePlot(f):
     data = SnapData(f)
+    # This section I added so that the plots can be annotated with more relevent info
     Make2DPlots(data, plane)
 
+def GetInfoFromDir(as_list=False):
+    mydir=os.getcwd()
+    if 'full1' in mydir or 'part1' in mydir:
+        return mydir
+    metallicity=re.findall('Metallicity(-?\d*\.?\d+([eE][-+]?\d+)?)',mydir)
+    if metallicity:
+        metallicity=metallicity[0]
+    cooling=re.findall("Grack_(\d)",mydir)
+    resolution=re.findall("Res(\d+)",mydir)
+    mingas=re.findall("MinGasTemp(\d+)",mydir)
+    sfeff=re.findall("SfEff(\d+\.\d+)",mydir)
+    uv=re.findall("UV(\d+)x",mydir)
+    ssf=re.findall("SSF(\d+_.*)/",mydir)
+    if as_list:
+        if not metallicity:
+            print "warning setting metallicity to default 0.1"
+            metallicity=[0.1]
+        if not cooling:
+            cooling=["normal"]
+        else:
+            cooling=['grack='+cooling[0]]
+        if not mingas:
+            mingas=[10]
+        if not sfeff:
+            sfeff=[1]
+        if resolution[0]=='23':
+            resolution=['low']
+        elif resolution[0]=='50':
+            resolution=['high']
+        if not uv:
+            uv=['0']
+        if not ssf:
+            ssf=['not_used']
+        return [metallicity[0],cooling[0],resolution[0],mingas[0],sfeff[0],uv[0],ssf[0]]
+    else:
+        outinfo=[]
+        if metallicity:
+            outinfo+=['Z%s'%metallicity[0]]
+        if cooling:
+            outinfo+=['grack%s'%cooling[0]]
+        if resolution:
+            outinfo+=['res%s'%resolution[0]]        
+        if mingas:
+            outinfo+=['mingas=%s'%mingas[0]]
+        if sfeff:
+            outinfo+=['sfeff%s'% sfeff[0]]
+        if uv:
+            outinfo+=['uv%s'%uv[0]]
+        if ssf:
+            outinfo+=['ssf%s'%ssf[0]]
+        return ', '.join(outinfo)
 
-if nproc > 1 and len(filenames) > 1:
-    Parallel(n_jobs=nproc)(delayed(MakePlot)(f) for f in filenames)
-else:
-    [MakePlot(f) for f in filenames]
-print("Done!")
+def convert_mass(m):
+    unit_mass_in_solarmass_per_h=1.0e10
+    return unit_mass_in_solarmass_per_h*m 
+
+
+def AnalyzePhase(f,as_list=True):
+    data = SnapData(f)
+    if data.time==0.0:
+        return
+    if target_time:
+        if not np.isclose(data.time,float(target_time)):
+            return
+    gas_idx = 0
+    if (accrete or GetInfoFromDir(f)[-1]!='not_used') and data.field_data[5]:
+        stars_idx = 5
+    else:
+        stars_idx =4
+
+
+    plt.clf()
+    gamma = 5.0/3.0
+    x_H = 0.76
+    a_e = 0.0
+    mu = 4.0 / (3.0 * x_H + 1.0 + 4.0 * x_H * a_e)
+    temp=data.field_data[gas_idx]["InternalEnergy"]*1e10*mu*(gamma-1)*1.211e-8
+
+    n, bins, patches = plt.hist(temp, 50, facecolor='green', alpha=0.75) #normed=1 gives probability
+    plt.xlabel("Temperature [Kelvin]")
+    plt.ylabel("$N_{gas}$")
+    plt.xscale("log")
+    plt.xlim([10**2,10**7])
+#    plt.yscale("log")
+    info=GetInfoFromDir(as_list=True) 
+    z=info[0]
+    plt.title(GetPlotTitle(data.time)+ ' $Z/Z_\odot=%s$'%z)
+    #l = plt.plot(bins, y, 'r--', linewidth=1)
+    plt.savefig("%s-%f_gastemphist.png"%(GetInfoFromDir(),data.time),dpi=400)
+
+    info+=[np.average(data.field_data[gas_idx]["Masses"]*temp)]
+    print 'MassWeight,',','.join(map(str,info))
+
+    #print "GAS SFE",data.time
+    #print "ave",np.average(data.field_data[gas_idx]["StarFormationRate"])
+    #print "min",np.min(data.field_data[gas_idx]["StarFormationRate"])
+    #print "max",np.max(data.field_data[gas_idx]["StarFormationRate"])
+
+
+    plt.plot(temp,data.field_data[gas_idx]["Density"],'ro')
+    plt.xlabel("InternalEnergy [Kelvin]") # particle internal energy (specific energy per unit mass in code units). units are physical
+    plt.ylabel("Density [units ?]")# Density (P['rho']): [N]-element array, code-calculated gas density, at the coordinate position of the particle 
+
+    # plt.yscale('log')
+    # plt.xscale('log')
+    plt.title(GetPlotTitle(data.time))
+
+    #l = plt.plot(bins, y, 'r--', linewidth=1)
+    plt.savefig("%s-%f_temp_dens.png"%(GetInfoFromDir(),data.time),dpi=400)
+
+
+def AnalyzeStars(f,as_list=True):
+    data = SnapData(f)
+    try:
+	hopf=open(f.replace("snapshot","bound").replace("hdf5","dat"))
+	hopf=genfromtxt(hopf)
+        try:
+            biggest_hop_mass=hopf[0][0]
+        except:
+            biggest_hop_mass=hopf[0]
+    except:
+	biggest_hop_mass="unknown"
+    if data.time==0.0:
+        return
+    if target_time:
+        if not np.isclose(data.time,float(target_time)):
+            return
+    if (accrete or GetInfoFromDir(f)[-1]!='not_used') and data.field_data[5]:
+        stars_idx = 5
+    else:
+        stars_idx =4
+    if not as_list:
+        #len(data.field_data[stars_idx]["ParticleIDs"]),"stars","at t=%.3f"%data.time,"for params",GetInfoFromDir()+","," average mass [msol/h]=",np.average(data.field_data[stars_idx]["Masses"]),"max mass=",np.max(data.field_data[stars_idx]["Masses"])
+        print "I found", len(data.field_data[stars_idx]["ParticleIDs"]),"stars","at t=%.3f"%data.time,"for params",GetInfoFromDir()+","," average mass [msol/h]=",np.average(data.field_data[stars_idx]["Masses"]),"max mass=",np.max(data.field_data[stars_idx]["Masses"])
+    else:
+        print  ','.join(map(str,
+                            [len(data.field_data[stars_idx]["ParticleIDs"]),
+                            "%.4f"%data.time]+
+                            GetInfoFromDir(as_list=True)+
+                            [np.average(data.field_data[stars_idx]["Masses"]),
+                                np.max(data.field_data[stars_idx]["Masses"]),
+                                np.sum(data.field_data[stars_idx]["Masses"]),
+                                np.sum(data.field_data[0]["Masses"]),
+				biggest_hop_mass]))
+        #print convert_mass(np.sum(data.field_data[stars_idx]["Masses"])+ np.sum(data.field_data[0]["Masses"]))
+
+    if accrete:
+        # here we are going to histogram
+
+        plt.clf()
+
+        n, bins, patches = plt.hist(convert_mass(data.field_data[stars_idx]["Masses"]), 50, facecolor='green', alpha=0.75) #normed=1 gives probability
+        plt.xlabel("Mass [$M_\odot/h$]")
+        plt.ylabel("$N_{stars}$")
+        plt.yscale("log")
+        plt.title(GetPlotTitle(data.time))
+        #l = plt.plot(bins, y, 'r--', linewidth=1)
+        plt.savefig("%s-%f_starhist.png"%(GetInfoFromDir(),data.time),dpi=400)
+    
+def main():
+    if nproc > 1:
+        from joblib import Parallel, delayed, cpu_count
+
+    if analyze_stars:
+        function = AnalyzeStars
+    elif analyze_phase:
+        function = AnalyzePhase
+    else:
+        function = MakePlot
+
+    if nproc > 1 and len(filenames) > 1:
+        Parallel(n_jobs=nproc)(delayed(function)(f) for f in filenames)
+    else:
+        [function(f) for f in filenames]
+    if not analyze_stars:
+        print("Done!")
+
+
+if __name__ == '__main__':
+    main()
 

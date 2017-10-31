@@ -3,12 +3,12 @@ proj_fields = "SurfaceDensity", "SigmaV", "KineticEnergy", "Q", "SFDensity", "Ma
 slice_fields = "Density", "NumberDensity", "Temperature", "MagEnergyDensity", "JeansMass", "B_z", "B_x", "B_y", "B"
 
 # Fields to actually plot
-fields_toplot = {0: ["SurfaceDensity"],
+fields_toplot = {0: ["SurfaceDensity","Temperature"],
                  1: [],
                  2: ["SurfaceDensity"],
                  3: ["SurfaceDensity"],
                  4: ["SurfaceDensity"],
-                 5: []
+                 5: ["SurfaceDensity"]
                  }
 
 # Colormap limits for each field
